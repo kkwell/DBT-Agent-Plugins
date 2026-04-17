@@ -2,6 +2,10 @@
 
 Platform plugin delivery repository for the Development Board Toolchain (`DBT-Agent`).
 
+This plugin workspace is authoritative only for platform plugin delivery under the current
+`DBT-Agent-Project` tree. Runtime-side source changes belong in the sibling `../dbt-agentd/`
+project inside the same workspace, not in external historical workspaces.
+
 This repository currently contains two platform-specific plugin projects:
 
 - `opencode_plugin/`
@@ -84,6 +88,7 @@ Runtime note:
 - the runtime package is distributed offline because it contains large cross-compilers and board toolchains
 - Codex now launches the installed `dbt-agentd` binary directly through native MCP stdio mode
 - the Codex installer runs a native MCP probe before install, so older runtime bundles are rejected early
+- if a plugin task also requires runtime-side code changes, modify `DBT-Agent-Project/dbt-agentd/` and then sync the plugin-facing docs here
 
 ## OpenCode Demos
 
