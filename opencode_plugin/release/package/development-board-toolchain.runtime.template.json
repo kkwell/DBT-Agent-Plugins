@@ -1,0 +1,9 @@
+{
+  "toolkitRoot": "~/Library/Application Support/development-board-toolchain/runtime",
+  "updateManifestURL": "https://raw.githubusercontent.com/kkwell/DBT-Agent/main/opencode-plugin-release-manifest.json",
+  "updateRepository": "https://github.com/kkwell/DBT-Agent.git",
+  "updateVersionURL": "https://raw.githubusercontent.com/kkwell/DBT-Agent/main/VERSION",
+  "localAgentURL": "http://127.0.0.1:18082",
+  "workspaceRoot": "~/Library/Application Support/development-board-toolchain/workspaces",
+  "insightUploadEnabled": false
+}

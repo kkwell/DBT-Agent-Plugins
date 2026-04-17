@@ -1,0 +1,6 @@
+{
+  "name": "development-board-toolchain",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

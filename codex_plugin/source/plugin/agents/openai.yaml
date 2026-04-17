@@ -1,0 +1,6 @@
+interface:
+  display_name: "DBT-Agent"
+  short_description: "Development Board Toolchain for Codex"
+  icon_small: "./assets/app-logo.png"
+  icon_large: "./assets/app-logo.png"
+  default_prompt: "Use DBT-Agent to inspect board status, fetch capability constraints, flash supported boards, and run shared runtime operations for TaishanPi and RP2350-family devices."

@@ -1,0 +1,9 @@
+{
+  "product": "opencode_plugin",
+  "name": "development-board-toolchain",
+  "version": "1.0.5",
+  "entry": "package/index.js",
+  "installer": "install.sh",
+  "runtime_required": true,
+  "runtime_install_dir": "~/Library/Application Support/development-board-toolchain/runtime"
+}

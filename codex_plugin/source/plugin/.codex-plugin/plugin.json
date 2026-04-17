@@ -1,0 +1,45 @@
+{
+  "name": "dbt-agent",
+  "version": "1.0.5",
+  "description": "Codex plugin for DBT-Agent, the Codex-facing Development Board Toolchain integration backed by the shared macOS runtime and dbt-agentd.",
+  "author": {
+    "name": "kvell",
+    "email": "support@example.invalid",
+    "url": "https://kong-cn.com/"
+  },
+  "homepage": "https://kong-cn.com/",
+  "repository": "https://github.com/kkwell/DBT-Agent",
+  "license": "Proprietary",
+  "keywords": [
+    "development-board",
+    "taishanpi",
+    "rp2350",
+    "pico2w",
+    "dbt-agent"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "DBT-Agent",
+    "shortDescription": "TaishanPi and RP2350-family board control for Codex",
+    "longDescription": "DBT-Agent is the Codex-facing name for Development Board Toolchain. It exposes compact board-control, build, flash, and capability tools through the shared macOS runtime and local dbt-agentd, covering TaishanPi, ColorEasyPICO2, and Raspberry Pi Pico 2 W.",
+    "developerName": "kvell",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Hardware Control"
+    ],
+    "websiteURL": "https://kong-cn.com/",
+    "privacyPolicyURL": "https://kong-cn.com/",
+    "termsOfServiceURL": "https://kong-cn.com/",
+    "defaultPrompt": [
+      "查看当前开发板状态",
+      "读取 Pico 2 W 的最小构建配置",
+      "为泰山派获取芯片控制或构建约束"
+    ],
+    "composerIcon": "./assets/app-logo.png",
+    "logo": "./assets/app-logo.png",
+    "screenshots": [],
+    "brandColor": "#1F6FEB"
+  },
+  "skills": "./skills/"
+}

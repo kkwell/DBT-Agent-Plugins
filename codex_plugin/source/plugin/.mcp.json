@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "dbt-agent": {
+      "command": "python3",
+      "args": [
+        "./scripts/dbt_agent_mcp.py"
+      ],
+      "cwd": ".",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DBT_TELEMETRY_SOURCE": "codex_plugin",
+        "DBT_CLIENT_KIND": "codex_plugin"
+      }
+    }
+  }
+}

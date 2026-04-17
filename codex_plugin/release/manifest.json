@@ -1,0 +1,15 @@
+{
+  "product": "codex_plugin",
+  "name": "dbt-agent",
+  "display_name": "DBT-Agent",
+  "version": "1.0.5",
+  "plugin_manifest": "package/.codex-plugin/plugin.json",
+  "marketplace": "marketplace.json",
+  "installer": "install.sh",
+  "runtime_required": true,
+  "runtime_install_dir": "~/Library/Application Support/development-board-toolchain/runtime",
+  "plugin_install_dir": "~/.codex/.tmp/plugins/plugins/dbt-agent",
+  "marketplace_install_dir": "~/.codex/.tmp/plugins/.agents/plugins/marketplace.json",
+  "developer": "kvell",
+  "website": "https://kong-cn.com/"
+}
