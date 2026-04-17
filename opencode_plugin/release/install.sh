@@ -9,12 +9,10 @@ COMMON_SH="${PLUGIN_ROOT}/../scripts/installer_common.sh"
 DEFAULT_INSTALL_DIR="${HOME}/.config/opencode/plugins/development-board-toolchain"
 DEFAULT_OPENCODE_HOME="${HOME}/.config/opencode"
 DEFAULT_RUNTIME_ROOT="${HOME}/Library/Application Support/development-board-toolchain/runtime"
+DEFAULT_WORKSPACE_ROOT="${HOME}/Library/Application Support/development-board-toolchain/workspaces"
 
 INSTALL_DIR="${DEFAULT_INSTALL_DIR}"
 RUNTIME_ROOT="${DEFAULT_RUNTIME_ROOT}"
-RUNTIME_BIN=""
-RUNTIME_INSTALLER_URL="${DBT_RUNTIME_INSTALLER_URL:-}"
-RUNTIME_MANIFEST_URL="${DBT_RUNTIME_MANIFEST_URL:-}"
 FORCE=0
 CHECK_ONLY=0
 
@@ -33,8 +31,6 @@ Usage: install.sh [options]
 Options:
   --install-dir <path>            OpenCode plugin install directory
   --runtime-root <path>           Shared runtime root
-  --runtime-installer-url <url>   Remote runtime installer URL
-  --runtime-manifest-url <url>    Remote runtime manifest URL
   --check-only                    Run environment checks without installing
   --force                         Overwrite existing plugin directory
   -h, --help                      Show this help
@@ -51,7 +47,6 @@ validate_release_layout() {
 
 validate_environment() {
   require_macos
-  require_command python3 "python3 is required to write the OpenCode runtime config"
   validate_release_layout
   ensure_parent_dir "${INSTALL_DIR}"
   ensure_parent_dir "${RUNTIME_ROOT}"
@@ -61,20 +56,9 @@ validate_environment() {
     warn "the installer will still continue, but starting OpenCode once before install is recommended"
   fi
 
-  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
-  if [[ ! -x "${RUNTIME_BIN}" ]]; then
-    if [[ -z "${RUNTIME_INSTALLER_URL}" && -z "${RUNTIME_MANIFEST_URL}" ]]; then
-      cat >&2 <<EOF
-error: shared runtime not found at:
-  ${RUNTIME_ROOT}
-
-Provide one of the following to bootstrap the runtime automatically:
-  --runtime-installer-url <url>
-  --runtime-manifest-url <url>
-EOF
-      exit 1
-    fi
-    check_download_support
+  if [[ ! -x "${RUNTIME_ROOT}/dbtctl" ]]; then
+    print_runtime_download_instructions "${RUNTIME_ROOT}"
+    exit 1
   fi
 }
 
@@ -83,105 +67,34 @@ print_environment_summary() {
   print_summary_line "platform" "opencode"
   print_summary_line "install dir" "${INSTALL_DIR}"
   print_summary_line "runtime root" "${RUNTIME_ROOT}"
-  if [[ -x "${RUNTIME_ROOT}/dbtctl" ]]; then
-    print_summary_line "runtime status" "present"
-  else
-    print_summary_line "runtime status" "will bootstrap from remote URL"
-  fi
+  print_summary_line "runtime status" "present"
   if [[ -e "${INSTALL_DIR}" && "${FORCE}" -ne 1 ]]; then
     warn "install directory already exists; rerun with --force to replace it"
   fi
 }
 
-download_file() {
-  local url="$1"
-  local output="$2"
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$output"
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$url" "$output" <<'PY'
-import sys
-import urllib.request
+write_runtime_config() {
+  local target="$1"
+  local runtime_root_json
+  local workspace_root_json
 
-url = sys.argv[1]
-output = sys.argv[2]
-with urllib.request.urlopen(url) as response:
-    data = response.read()
-with open(output, "wb") as fh:
-    fh.write(data)
-PY
-  else
-    echo "curl or python3 is required to download ${url}" >&2
-    exit 1
-  fi
+  runtime_root_json="$(json_escape "${RUNTIME_ROOT}")"
+  workspace_root_json="$(json_escape "${DEFAULT_WORKSPACE_ROOT}")"
+
+  cat > "${target}" <<EOF
+{
+  "toolkitRoot": "${runtime_root_json}",
+  "updateManifestURL": "https://raw.githubusercontent.com/kkwell/DBT-Agent/main/opencode-plugin-release-manifest.json",
+  "updateRepository": "https://github.com/kkwell/DBT-Agent.git",
+  "updateVersionURL": "https://raw.githubusercontent.com/kkwell/DBT-Agent/main/VERSION",
+  "localAgentURL": "http://127.0.0.1:18082",
+  "workspaceRoot": "${workspace_root_json}",
+  "insightUploadEnabled": false
 }
-
-install_runtime_if_needed() {
-  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
-  if [[ -x "${RUNTIME_BIN}" ]]; then
-    info "shared runtime detected at: ${RUNTIME_ROOT}"
-    return 0
-  fi
-
-  info "shared runtime is missing; starting runtime bootstrap"
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  trap 'rm -rf "${temp_dir}"' EXIT
-
-  local installer_path="${temp_dir}/runtime-install.sh"
-
-  if [[ -n "${RUNTIME_INSTALLER_URL}" ]]; then
-    download_file "${RUNTIME_INSTALLER_URL}" "${installer_path}"
-  elif [[ -n "${RUNTIME_MANIFEST_URL}" ]]; then
-    if command -v python3 >/dev/null 2>&1; then
-      python3 - "${RUNTIME_MANIFEST_URL}" "${installer_path}" <<'PY'
-import json
-import sys
-import urllib.request
-
-manifest_url = sys.argv[1]
-installer_path = sys.argv[2]
-
-with urllib.request.urlopen(manifest_url) as response:
-    manifest = json.loads(response.read().decode("utf-8"))
-
-installer_url = manifest.get("installer_url") or manifest.get("installer_path")
-if not installer_url:
-    raise SystemExit("runtime manifest is missing installer_url")
-
-with urllib.request.urlopen(installer_url) as response:
-    data = response.read()
-
-with open(installer_path, "wb") as fh:
-    fh.write(data)
-PY
-    else
-      echo "python3 is required to resolve runtime manifest URL" >&2
-      exit 1
-    fi
-  else
-    cat >&2 <<EOF
-shared runtime not found at:
-  ${RUNTIME_ROOT}
-
-Install the runtime first, or rerun with one of:
-  --runtime-installer-url <url>
-  --runtime-manifest-url <url>
 EOF
-    exit 1
-  fi
-
-  chmod +x "${installer_path}"
-  /bin/bash "${installer_path}" --force
-  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
-
-  if [[ ! -x "${RUNTIME_BIN}" ]]; then
-    echo "runtime installation finished but dbtctl is still missing: ${RUNTIME_BIN}" >&2
-    exit 1
-  fi
 }
 
-  while [[ $# -gt 0 ]]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --install-dir)
       INSTALL_DIR="$2"
@@ -189,14 +102,6 @@ EOF
       ;;
     --runtime-root)
       RUNTIME_ROOT="$2"
-      shift 2
-      ;;
-    --runtime-installer-url)
-      RUNTIME_INSTALLER_URL="$2"
-      shift 2
-      ;;
-    --runtime-manifest-url)
-      RUNTIME_MANIFEST_URL="$2"
       shift 2
       ;;
     --check-only)
@@ -226,8 +131,6 @@ if [[ "${CHECK_ONLY}" -eq 1 ]]; then
   exit 0
 fi
 
-install_runtime_if_needed
-
 if [[ -e "${INSTALL_DIR}" ]]; then
   if [[ "${FORCE}" -ne 1 ]]; then
     echo "install directory already exists: ${INSTALL_DIR}" >&2
@@ -241,23 +144,7 @@ mkdir -p "${INSTALL_DIR}"
 cp -R "${PACKAGE_ROOT}/." "${INSTALL_DIR}/"
 
 RUNTIME_CONFIG="${INSTALL_DIR}/development-board-toolchain.runtime.json"
-python3 - "${PACKAGE_ROOT}/development-board-toolchain.runtime.template.json" "${RUNTIME_CONFIG}" "${RUNTIME_ROOT}" <<'PY'
-import json
-import sys
-
-template_path = sys.argv[1]
-target_path = sys.argv[2]
-runtime_root = sys.argv[3]
-
-with open(template_path, "r", encoding="utf-8") as fh:
-    config = json.load(fh)
-
-config["toolkitRoot"] = runtime_root
-
-with open(target_path, "w", encoding="utf-8") as fh:
-    json.dump(config, fh, indent=2, ensure_ascii=False)
-    fh.write("\n")
-PY
+write_runtime_config "${RUNTIME_CONFIG}"
 
 require_file "${RUNTIME_CONFIG}" "runtime config was not written: ${RUNTIME_CONFIG}"
 

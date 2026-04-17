@@ -1,5 +1,8 @@
 #!/bin/bash
 
+RUNTIME_DOWNLOAD_URL="https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001"
+RUNTIME_DOWNLOAD_PASSWORD="0001"
+
 fail() {
   echo "error: $*" >&2
   exit 1
@@ -55,16 +58,43 @@ ensure_dir_writable() {
   [[ -w "${path}" ]] || fail "directory is not writable: ${path}"
 }
 
-check_download_support() {
-  if have_command curl; then
-    return 0
-  fi
-  if have_command python3; then
-    return 0
-  fi
-  fail "runtime bootstrap requires curl or python3 to download remote installer assets"
-}
-
 print_summary_line() {
   printf "  %-20s %s\n" "$1" "$2"
+}
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "${value}"
+}
+
+print_runtime_download_instructions() {
+  local runtime_root="$1"
+  local extra_requirement="${2:-}"
+  cat >&2 <<EOF
+error: shared runtime not found at:
+  ${runtime_root}
+
+The DBT runtime is distributed as an offline package because it contains large cross-compilers
+and board toolchains. Download and install the runtime first, then rerun this installer.
+
+Download link:
+  ${RUNTIME_DOWNLOAD_URL}
+Password:
+  ${RUNTIME_DOWNLOAD_PASSWORD}
+
+Expected runtime file:
+  ${runtime_root}/dbtctl
+EOF
+
+  if [[ -n "${extra_requirement}" ]]; then
+    cat >&2 <<EOF
+Additional required file:
+  ${extra_requirement}
+EOF
+  fi
 }

@@ -70,6 +70,15 @@ Release entry for end users:
 - platform installers:
   - `./release/install-opencode.sh`
   - `./release/install-codex.sh`
+- offline runtime download:
+  - [Baidu Netdisk runtime package](https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001)
+  - password: `0001`
+
+Runtime note:
+
+- the shared DBT runtime is not auto-downloaded by this repository
+- the runtime package is distributed offline because it contains large cross-compilers and board toolchains
+- Codex still requires `python3` locally because the Codex MCP bridge runs `dbt_agent_mcp.py` through `python3`
 
 ## OpenCode Demos
 

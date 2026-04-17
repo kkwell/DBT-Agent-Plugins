@@ -16,9 +16,6 @@ DEFAULT_RUNTIME_ROOT="${HOME}/Library/Application Support/development-board-tool
 INSTALL_DIR="${DEFAULT_INSTALL_DIR}"
 MARKETPLACE_PATH="${DEFAULT_MARKETPLACE_PATH}"
 RUNTIME_ROOT="${DEFAULT_RUNTIME_ROOT}"
-RUNTIME_BIN=""
-RUNTIME_INSTALLER_URL="${DBT_RUNTIME_INSTALLER_URL:-}"
-RUNTIME_MANIFEST_URL="${DBT_RUNTIME_MANIFEST_URL:-}"
 FORCE=0
 CHECK_ONLY=0
 
@@ -38,8 +35,6 @@ Options:
   --install-dir <path>            Codex plugin install directory
   --marketplace-path <path>       Codex local marketplace JSON path
   --runtime-root <path>           Shared runtime root
-  --runtime-installer-url <url>   Remote runtime installer URL
-  --runtime-manifest-url <url>    Remote runtime manifest URL
   --check-only                    Run environment checks without installing
   --force                         Overwrite existing plugin directory
   -h, --help                      Show this help
@@ -58,7 +53,7 @@ validate_release_layout() {
 
 validate_environment() {
   require_macos
-  require_command python3 "python3 is required to write the Codex MCP config"
+  require_command python3 "python3 is required by the Codex plugin to launch scripts/dbt_agent_mcp.py"
   validate_release_layout
   ensure_parent_dir "${INSTALL_DIR}"
   ensure_parent_dir "${MARKETPLACE_PATH}"
@@ -69,20 +64,15 @@ validate_environment() {
     warn "the installer will still continue, but launching Codex once before install is recommended"
   fi
 
-  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
-  if [[ ! -x "${RUNTIME_BIN}" ]]; then
-    if [[ -z "${RUNTIME_INSTALLER_URL}" && -z "${RUNTIME_MANIFEST_URL}" ]]; then
-      cat >&2 <<EOF
-error: shared runtime not found at:
-  ${RUNTIME_ROOT}
+  local runtime_mcp_script="${RUNTIME_ROOT}/editor_plugins/codex/scripts/dbt_agent_mcp.py"
+  if [[ ! -x "${RUNTIME_ROOT}/dbtctl" ]]; then
+    print_runtime_download_instructions "${RUNTIME_ROOT}" "${runtime_mcp_script}"
+    exit 1
+  fi
 
-Provide one of the following to bootstrap the runtime automatically:
-  --runtime-installer-url <url>
-  --runtime-manifest-url <url>
-EOF
-      exit 1
-    fi
-    check_download_support
+  if [[ ! -f "${runtime_mcp_script}" ]]; then
+    print_runtime_download_instructions "${RUNTIME_ROOT}" "${runtime_mcp_script}"
+    exit 1
   fi
 }
 
@@ -92,140 +82,41 @@ print_environment_summary() {
   print_summary_line "install dir" "${INSTALL_DIR}"
   print_summary_line "marketplace" "${MARKETPLACE_PATH}"
   print_summary_line "runtime root" "${RUNTIME_ROOT}"
-  if [[ -x "${RUNTIME_ROOT}/dbtctl" ]]; then
-    print_summary_line "runtime status" "present"
-  else
-    print_summary_line "runtime status" "will bootstrap from remote URL"
-  fi
+  print_summary_line "runtime status" "present"
+  print_summary_line "python3" "$(command -v python3)"
   if [[ -e "${INSTALL_DIR}" && "${FORCE}" -ne 1 ]]; then
     warn "install directory already exists; rerun with --force to replace it"
   fi
 }
 
-download_file() {
-  local url="$1"
-  local output="$2"
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$output"
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$url" "$output" <<'PY'
-import sys
-import urllib.request
-
-url = sys.argv[1]
-output = sys.argv[2]
-with urllib.request.urlopen(url) as response:
-    data = response.read()
-with open(output, "wb") as fh:
-    fh.write(data)
-PY
-  else
-    echo "curl or python3 is required to download ${url}" >&2
-    exit 1
-  fi
-}
-
-install_runtime_if_needed() {
-  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
-  if [[ -x "${RUNTIME_BIN}" ]]; then
-    info "shared runtime detected at: ${RUNTIME_ROOT}"
-    return 0
-  fi
-
-  info "shared runtime is missing; starting runtime bootstrap"
-  local temp_dir
-  temp_dir="$(mktemp -d)"
-  trap 'rm -rf "${temp_dir}"' EXIT
-
-  local installer_path="${temp_dir}/runtime-install.sh"
-
-  if [[ -n "${RUNTIME_INSTALLER_URL}" ]]; then
-    download_file "${RUNTIME_INSTALLER_URL}" "${installer_path}"
-  elif [[ -n "${RUNTIME_MANIFEST_URL}" ]]; then
-    if command -v python3 >/dev/null 2>&1; then
-      python3 - "${RUNTIME_MANIFEST_URL}" "${installer_path}" <<'PY'
-import json
-import sys
-import urllib.request
-
-manifest_url = sys.argv[1]
-installer_path = sys.argv[2]
-
-with urllib.request.urlopen(manifest_url) as response:
-    manifest = json.loads(response.read().decode("utf-8"))
-
-installer_url = manifest.get("installer_url") or manifest.get("installer_path")
-if not installer_url:
-    raise SystemExit("runtime manifest is missing installer_url")
-
-with urllib.request.urlopen(installer_url) as response:
-    data = response.read()
-
-with open(installer_path, "wb") as fh:
-    fh.write(data)
-PY
-    else
-      echo "python3 is required to resolve runtime manifest URL" >&2
-      exit 1
-    fi
-  else
-    cat >&2 <<EOF
-shared runtime not found at:
-  ${RUNTIME_ROOT}
-
-Install the runtime first, or rerun with one of:
-  --runtime-installer-url <url>
-  --runtime-manifest-url <url>
-EOF
-    exit 1
-  fi
-
-  chmod +x "${installer_path}"
-  /bin/bash "${installer_path}" --force
-  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
-
-  if [[ ! -x "${RUNTIME_BIN}" ]]; then
-    echo "runtime installation finished but dbtctl is still missing: ${RUNTIME_BIN}" >&2
-    exit 1
-  fi
-
-  local runtime_mcp_script="${RUNTIME_ROOT}/editor_plugins/codex/scripts/dbt_agent_mcp.py"
-  if [[ ! -f "${runtime_mcp_script}" ]]; then
-    echo "runtime installation finished but Codex MCP script is missing: ${runtime_mcp_script}" >&2
-    exit 1
-  fi
-}
-
 write_runtime_mcp_config() {
   local target="$1"
-  python3 - "${target}" "${RUNTIME_ROOT}" <<'PY'
-import json
-import sys
-from pathlib import Path
+  local runtime_root_json
+  local script_path_json
 
-target_path = Path(sys.argv[1])
-runtime_root = Path(sys.argv[2])
-script_path = runtime_root / "editor_plugins" / "codex" / "scripts" / "dbt_agent_mcp.py"
+  runtime_root_json="$(json_escape "${RUNTIME_ROOT}")"
+  script_path_json="$(json_escape "${RUNTIME_ROOT}/editor_plugins/codex/scripts/dbt_agent_mcp.py")"
 
-config = {
-    "mcpServers": {
-        "dbt-agent": {
-            "command": "python3",
-            "args": [str(script_path)],
-            "cwd": ".",
-            "env": {
-                "PYTHONUNBUFFERED": "1",
-                "DBT_TOOLKIT_ROOT": str(runtime_root),
-                "RK356X_TOOLKIT_ROOT": str(runtime_root),
-                "DBT_TELEMETRY_SOURCE": "codex_plugin",
-                "DBT_CLIENT_KIND": "codex_plugin",
-            },
-        }
+  cat > "${target}" <<EOF
+{
+  "mcpServers": {
+    "dbt-agent": {
+      "command": "python3",
+      "args": [
+        "${script_path_json}"
+      ],
+      "cwd": ".",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DBT_TOOLKIT_ROOT": "${runtime_root_json}",
+        "RK356X_TOOLKIT_ROOT": "${runtime_root_json}",
+        "DBT_TELEMETRY_SOURCE": "codex_plugin",
+        "DBT_CLIENT_KIND": "codex_plugin"
+      }
     }
+  }
 }
-
-target_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-PY
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
@@ -240,14 +131,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --runtime-root)
       RUNTIME_ROOT="$2"
-      shift 2
-      ;;
-    --runtime-installer-url)
-      RUNTIME_INSTALLER_URL="$2"
-      shift 2
-      ;;
-    --runtime-manifest-url)
-      RUNTIME_MANIFEST_URL="$2"
       shift 2
       ;;
     --check-only)
@@ -276,8 +159,6 @@ print_environment_summary
 if [[ "${CHECK_ONLY}" -eq 1 ]]; then
   exit 0
 fi
-
-install_runtime_if_needed
 
 if [[ -e "${INSTALL_DIR}" ]]; then
   if [[ "${FORCE}" -ne 1 ]]; then

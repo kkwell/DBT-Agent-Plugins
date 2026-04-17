@@ -29,28 +29,32 @@ Unified installer:
 
 - macOS host environment
 - required local release files
-- `python3` availability
-- runtime presence, or runtime bootstrap inputs if the runtime is missing
+- runtime presence
 - writable install targets
 - platform home detection with warnings if the client has not been launched yet
+- for Codex only: `python3` availability, because Codex launches `dbt_agent_mcp.py` through `python3`
 
-## Runtime Bootstrap
+## Runtime Installation
 
-If the shared runtime is not installed yet, both platform installers support runtime bootstrap through a remote installer URL:
+The shared DBT runtime is not auto-downloaded by these installers. It contains large cross-compilers
+and board toolchains, so users must download and install it offline first.
+
+Download link:
+
+- [Baidu Netdisk runtime package](https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001)
+- password: `0001`
+
+After the runtime is installed, rerun the platform installer:
 
 ```bash
-/bin/bash ./release/install-opencode.sh \
-  --runtime-installer-url "<runtime-installer-url>" \
-  --force
+/bin/bash ./release/install-opencode.sh --check-only
+/bin/bash ./release/install-codex.sh --check-only
 ```
 
-or a manifest URL:
+## Why Codex Still Checks `python3`
 
-```bash
-/bin/bash ./release/install-codex.sh \
-  --runtime-manifest-url "<runtime-manifest-url>" \
-  --force
-```
+The Codex plugin launches the local MCP bridge script `dbt_agent_mcp.py` through `python3`.
+This requirement belongs to the Codex plugin wrapper itself, not to the offline DBT runtime package.
 
 ## Platform Docs
 

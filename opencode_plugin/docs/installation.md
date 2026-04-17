@@ -7,9 +7,8 @@ This plugin always uses the shared runtime installed at:
 ## Requirements
 
 - macOS
-- `python3`
 - OpenCode is recommended to be launched once before installation
-- the shared runtime already exists, or a runtime bootstrap URL is provided during install
+- the shared runtime is installed locally first
 
 ## Preflight Check
 
@@ -24,7 +23,6 @@ The preflight check validates:
 - local release files
 - writable install targets
 - runtime availability
-- runtime bootstrap prerequisites when remote URLs are used
 
 ## Recommended Install Flow
 
@@ -37,22 +35,21 @@ The preflight check validates:
 
 3. Restart OpenCode and open a new session.
 
-## If Runtime Is Not Installed Yet
+## Install The Runtime First
 
-The installer supports bootstrapping runtime through remote URLs:
+The OpenCode plugin installer does not auto-download the runtime.
+The runtime package is large because it contains board toolchains and cross-compilers, so users need to install it offline first.
+
+Download link:
+
+- [Baidu Netdisk runtime package](https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001)
+- password: `0001`
+
+After the runtime is installed, rerun:
 
 ```bash
-/bin/bash ./release/install.sh \
-  --runtime-installer-url "<runtime-installer-url>" \
-  --force
-```
-
-or:
-
-```bash
-/bin/bash ./release/install.sh \
-  --runtime-manifest-url "<runtime-manifest-url>" \
-  --force
+/bin/bash ./release/install.sh --check-only
+/bin/bash ./release/install.sh --force
 ```
 
 ## Default Install Location
@@ -77,6 +74,6 @@ It points to the shared runtime root under Application Support.
 
 ## Troubleshooting
 
-- if the installer says the runtime is missing, rerun with `--runtime-installer-url` or `--runtime-manifest-url`
+- if the installer says the runtime is missing, install the offline runtime package first, then rerun the installer
 - if the install directory already exists, rerun with `--force`
 - if OpenCode does not detect the plugin, restart OpenCode after installation
