@@ -12,9 +12,31 @@ The local marketplace entry is written to:
 
 - `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`
 
-## Recommended install flow
+## Requirements
 
-1. Ensure the shared runtime already exists.
+- macOS
+- `python3`
+- Codex is recommended to be launched once before installation
+- the shared runtime already exists, or a runtime bootstrap URL is provided during install
+
+## Preflight Check
+
+Run the installer in check-only mode first:
+
+```bash
+/bin/bash ./release/install.sh --check-only
+```
+
+The preflight check validates:
+
+- local release files
+- writable install targets
+- runtime availability
+- runtime bootstrap prerequisites when remote URLs are used
+
+## Recommended Install Flow
+
+1. Run the preflight check.
 2. Install or update the Codex plugin package:
 
 ```bash
@@ -24,7 +46,7 @@ The local marketplace entry is written to:
 3. Restart Codex.
 4. Open the plugin list. `DBT-Agent` should appear as the local Development Board Toolchain plugin.
 
-## If runtime is not installed yet
+## If Runtime Is Not Installed Yet
 
 The installer supports bootstrapping the shared runtime through remote URLs:
 
@@ -42,7 +64,7 @@ or:
   --force
 ```
 
-## Install model
+## Install Model
 
 - Codex plugin package:
   - local thin wrapper only
@@ -53,7 +75,22 @@ or:
 
 The installer rewrites the plugin `.mcp.json` so Codex calls the shared runtime MCP script, not a duplicated plugin-local runtime.
 
-## Update rule
+## Verify The Installation
+
+- confirm the plugin directory exists:
+  - `~/.codex/.tmp/plugins/plugins/dbt-agent`
+- confirm the local marketplace entry exists:
+  - `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`
+- restart Codex
+- open the plugin list and confirm `DBT-Agent` is available
+
+## Troubleshooting
+
+- if the installer says the runtime is missing, rerun with `--runtime-installer-url` or `--runtime-manifest-url`
+- if the install directory already exists, rerun with `--force`
+- if Codex does not show the plugin, restart Codex after installation
+
+## Update Rule
 
 If you change files under `source/plugin/`, sync the release package before publishing:
 

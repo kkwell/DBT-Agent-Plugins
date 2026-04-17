@@ -1,0 +1,17 @@
+{
+  "name": "DBT-Agent-Plugins",
+  "version": "1.0.5",
+  "release_entry": "release/install.sh",
+  "platforms": {
+    "opencode": {
+      "installer": "release/install-opencode.sh",
+      "docs": "opencode_plugin/docs/installation.md",
+      "manifest": "opencode_plugin/release/manifest.json"
+    },
+    "codex": {
+      "installer": "release/install-codex.sh",
+      "docs": "codex_plugin/docs/installation.md",
+      "manifest": "codex_plugin/release/manifest.json"
+    }
+  }
+}

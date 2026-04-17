@@ -4,9 +4,31 @@ This plugin always uses the shared runtime installed at:
 
 - `~/Library/Application Support/development-board-toolchain/runtime`
 
-## Recommended install flow
+## Requirements
 
-1. Ensure the shared runtime already exists.
+- macOS
+- `python3`
+- OpenCode is recommended to be launched once before installation
+- the shared runtime already exists, or a runtime bootstrap URL is provided during install
+
+## Preflight Check
+
+Run the installer in check-only mode first:
+
+```bash
+/bin/bash ./release/install.sh --check-only
+```
+
+The preflight check validates:
+
+- local release files
+- writable install targets
+- runtime availability
+- runtime bootstrap prerequisites when remote URLs are used
+
+## Recommended Install Flow
+
+1. Run the preflight check.
 2. Install or update the plugin package:
 
 ```bash
@@ -15,7 +37,7 @@ This plugin always uses the shared runtime installed at:
 
 3. Restart OpenCode and open a new session.
 
-## If runtime is not installed yet
+## If Runtime Is Not Installed Yet
 
 The installer supports bootstrapping runtime through remote URLs:
 
@@ -33,7 +55,7 @@ or:
   --force
 ```
 
-## Default install location
+## Default Install Location
 
 The plugin is installed to:
 
@@ -44,3 +66,17 @@ The runtime config written beside the plugin is:
 - `development-board-toolchain.runtime.json`
 
 It points to the shared runtime root under Application Support.
+
+## Verify The Installation
+
+- confirm the plugin directory exists:
+  - `~/.config/opencode/plugins/development-board-toolchain`
+- confirm the runtime config exists:
+  - `~/.config/opencode/plugins/development-board-toolchain/development-board-toolchain.runtime.json`
+- restart OpenCode and open a new session
+
+## Troubleshooting
+
+- if the installer says the runtime is missing, rerun with `--runtime-installer-url` or `--runtime-manifest-url`
+- if the install directory already exists, rerun with `--force`
+- if OpenCode does not detect the plugin, restart OpenCode after installation

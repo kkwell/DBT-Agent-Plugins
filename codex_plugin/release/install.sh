@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RELEASE_ROOT="$(cd "${SCRIPT_DIR}" && pwd)"
 PACKAGE_ROOT="${RELEASE_ROOT}/package"
 MARKETPLACE_SOURCE="${RELEASE_ROOT}/marketplace.json"
+COMMON_SH="${RELEASE_ROOT}/../../scripts/installer_common.sh"
 
 DEFAULT_CODEX_HOME="${HOME}/.codex"
 DEFAULT_PLUGIN_ROOT="${DEFAULT_CODEX_HOME}/.tmp/plugins"
@@ -19,6 +20,15 @@ RUNTIME_BIN=""
 RUNTIME_INSTALLER_URL="${DBT_RUNTIME_INSTALLER_URL:-}"
 RUNTIME_MANIFEST_URL="${DBT_RUNTIME_MANIFEST_URL:-}"
 FORCE=0
+CHECK_ONLY=0
+
+if [[ ! -f "${COMMON_SH}" ]]; then
+  echo "error: installer helper not found: ${COMMON_SH}" >&2
+  exit 1
+fi
+
+# shellcheck source=../../scripts/installer_common.sh
+source "${COMMON_SH}"
 
 usage() {
   cat <<'EOF'
@@ -30,9 +40,66 @@ Options:
   --runtime-root <path>           Shared runtime root
   --runtime-installer-url <url>   Remote runtime installer URL
   --runtime-manifest-url <url>    Remote runtime manifest URL
+  --check-only                    Run environment checks without installing
   --force                         Overwrite existing plugin directory
   -h, --help                      Show this help
 EOF
+}
+
+validate_release_layout() {
+  require_dir "${PACKAGE_ROOT}" "release package not found: ${PACKAGE_ROOT}"
+  require_file "${MARKETPLACE_SOURCE}" "release marketplace not found: ${MARKETPLACE_SOURCE}"
+  require_file "${PACKAGE_ROOT}/.codex-plugin/plugin.json" \
+    "plugin manifest not found: ${PACKAGE_ROOT}/.codex-plugin/plugin.json"
+  require_file "${PACKAGE_ROOT}/.mcp.json" "plugin MCP config not found: ${PACKAGE_ROOT}/.mcp.json"
+  require_file "${PACKAGE_ROOT}/scripts/dbt_agent_mcp.py" \
+    "plugin MCP wrapper not found: ${PACKAGE_ROOT}/scripts/dbt_agent_mcp.py"
+}
+
+validate_environment() {
+  require_macos
+  require_command python3 "python3 is required to write the Codex MCP config"
+  validate_release_layout
+  ensure_parent_dir "${INSTALL_DIR}"
+  ensure_parent_dir "${MARKETPLACE_PATH}"
+  ensure_parent_dir "${RUNTIME_ROOT}"
+
+  if [[ ! -d "${DEFAULT_CODEX_HOME}" ]]; then
+    warn "Codex home was not found: ${DEFAULT_CODEX_HOME}"
+    warn "the installer will still continue, but launching Codex once before install is recommended"
+  fi
+
+  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
+  if [[ ! -x "${RUNTIME_BIN}" ]]; then
+    if [[ -z "${RUNTIME_INSTALLER_URL}" && -z "${RUNTIME_MANIFEST_URL}" ]]; then
+      cat >&2 <<EOF
+error: shared runtime not found at:
+  ${RUNTIME_ROOT}
+
+Provide one of the following to bootstrap the runtime automatically:
+  --runtime-installer-url <url>
+  --runtime-manifest-url <url>
+EOF
+      exit 1
+    fi
+    check_download_support
+  fi
+}
+
+print_environment_summary() {
+  info "environment checks passed for Codex plugin release"
+  print_summary_line "platform" "codex"
+  print_summary_line "install dir" "${INSTALL_DIR}"
+  print_summary_line "marketplace" "${MARKETPLACE_PATH}"
+  print_summary_line "runtime root" "${RUNTIME_ROOT}"
+  if [[ -x "${RUNTIME_ROOT}/dbtctl" ]]; then
+    print_summary_line "runtime status" "present"
+  else
+    print_summary_line "runtime status" "will bootstrap from remote URL"
+  fi
+  if [[ -e "${INSTALL_DIR}" && "${FORCE}" -ne 1 ]]; then
+    warn "install directory already exists; rerun with --force to replace it"
+  fi
 }
 
 download_file() {
@@ -61,9 +128,11 @@ PY
 install_runtime_if_needed() {
   RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
   if [[ -x "${RUNTIME_BIN}" ]]; then
+    info "shared runtime detected at: ${RUNTIME_ROOT}"
     return 0
   fi
 
+  info "shared runtime is missing; starting runtime bootstrap"
   local temp_dir
   temp_dir="$(mktemp -d)"
   trap 'rm -rf "${temp_dir}"' EXIT
@@ -117,6 +186,12 @@ EOF
 
   if [[ ! -x "${RUNTIME_BIN}" ]]; then
     echo "runtime installation finished but dbtctl is still missing: ${RUNTIME_BIN}" >&2
+    exit 1
+  fi
+
+  local runtime_mcp_script="${RUNTIME_ROOT}/editor_plugins/codex/scripts/dbt_agent_mcp.py"
+  if [[ ! -f "${runtime_mcp_script}" ]]; then
+    echo "runtime installation finished but Codex MCP script is missing: ${runtime_mcp_script}" >&2
     exit 1
   fi
 }
@@ -175,6 +250,10 @@ while [[ $# -gt 0 ]]; do
       RUNTIME_MANIFEST_URL="$2"
       shift 2
       ;;
+    --check-only)
+      CHECK_ONLY=1
+      shift
+      ;;
     --force)
       FORCE=1
       shift
@@ -191,14 +270,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ ! -d "${PACKAGE_ROOT}" ]]; then
-  echo "release package not found: ${PACKAGE_ROOT}" >&2
-  exit 1
-fi
+validate_environment
+print_environment_summary
 
-if [[ ! -f "${MARKETPLACE_SOURCE}" ]]; then
-  echo "release marketplace not found: ${MARKETPLACE_SOURCE}" >&2
-  exit 1
+if [[ "${CHECK_ONLY}" -eq 1 ]]; then
+  exit 0
 fi
 
 install_runtime_if_needed
@@ -220,6 +296,10 @@ cp "${MARKETPLACE_SOURCE}" "${MARKETPLACE_PATH}"
 
 write_runtime_mcp_config "${INSTALL_DIR}/.mcp.json"
 
+require_file "${INSTALL_DIR}/.mcp.json" "Codex MCP config was not written: ${INSTALL_DIR}/.mcp.json"
+require_file "${MARKETPLACE_PATH}" "Codex marketplace entry was not written: ${MARKETPLACE_PATH}"
+
 echo "installed Codex plugin to: ${INSTALL_DIR}"
 echo "local marketplace: ${MARKETPLACE_PATH}"
 echo "shared runtime: ${RUNTIME_ROOT}"
+echo "next step: restart Codex and confirm that DBT-Agent appears in the plugin list"

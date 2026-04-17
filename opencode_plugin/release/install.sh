@@ -4,8 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PACKAGE_ROOT="${SCRIPT_DIR}/package"
+COMMON_SH="${PLUGIN_ROOT}/../scripts/installer_common.sh"
 
 DEFAULT_INSTALL_DIR="${HOME}/.config/opencode/plugins/development-board-toolchain"
+DEFAULT_OPENCODE_HOME="${HOME}/.config/opencode"
 DEFAULT_RUNTIME_ROOT="${HOME}/Library/Application Support/development-board-toolchain/runtime"
 
 INSTALL_DIR="${DEFAULT_INSTALL_DIR}"
@@ -14,6 +16,15 @@ RUNTIME_BIN=""
 RUNTIME_INSTALLER_URL="${DBT_RUNTIME_INSTALLER_URL:-}"
 RUNTIME_MANIFEST_URL="${DBT_RUNTIME_MANIFEST_URL:-}"
 FORCE=0
+CHECK_ONLY=0
+
+if [[ ! -f "${COMMON_SH}" ]]; then
+  echo "error: installer helper not found: ${COMMON_SH}" >&2
+  exit 1
+fi
+
+# shellcheck source=../../scripts/installer_common.sh
+source "${COMMON_SH}"
 
 usage() {
   cat <<'EOF'
@@ -24,9 +35,62 @@ Options:
   --runtime-root <path>           Shared runtime root
   --runtime-installer-url <url>   Remote runtime installer URL
   --runtime-manifest-url <url>    Remote runtime manifest URL
+  --check-only                    Run environment checks without installing
   --force                         Overwrite existing plugin directory
   -h, --help                      Show this help
 EOF
+}
+
+validate_release_layout() {
+  require_dir "${PACKAGE_ROOT}" "release package not found: ${PACKAGE_ROOT}"
+  require_file "${PACKAGE_ROOT}/index.js" "release entry not found: ${PACKAGE_ROOT}/index.js"
+  require_file "${PACKAGE_ROOT}/package.json" "release package manifest not found: ${PACKAGE_ROOT}/package.json"
+  require_file "${PACKAGE_ROOT}/development-board-toolchain.runtime.template.json" \
+    "runtime config template not found: ${PACKAGE_ROOT}/development-board-toolchain.runtime.template.json"
+}
+
+validate_environment() {
+  require_macos
+  require_command python3 "python3 is required to write the OpenCode runtime config"
+  validate_release_layout
+  ensure_parent_dir "${INSTALL_DIR}"
+  ensure_parent_dir "${RUNTIME_ROOT}"
+
+  if [[ ! -d "${DEFAULT_OPENCODE_HOME}" ]]; then
+    warn "OpenCode config root was not found: ${DEFAULT_OPENCODE_HOME}"
+    warn "the installer will still continue, but starting OpenCode once before install is recommended"
+  fi
+
+  RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
+  if [[ ! -x "${RUNTIME_BIN}" ]]; then
+    if [[ -z "${RUNTIME_INSTALLER_URL}" && -z "${RUNTIME_MANIFEST_URL}" ]]; then
+      cat >&2 <<EOF
+error: shared runtime not found at:
+  ${RUNTIME_ROOT}
+
+Provide one of the following to bootstrap the runtime automatically:
+  --runtime-installer-url <url>
+  --runtime-manifest-url <url>
+EOF
+      exit 1
+    fi
+    check_download_support
+  fi
+}
+
+print_environment_summary() {
+  info "environment checks passed for OpenCode plugin release"
+  print_summary_line "platform" "opencode"
+  print_summary_line "install dir" "${INSTALL_DIR}"
+  print_summary_line "runtime root" "${RUNTIME_ROOT}"
+  if [[ -x "${RUNTIME_ROOT}/dbtctl" ]]; then
+    print_summary_line "runtime status" "present"
+  else
+    print_summary_line "runtime status" "will bootstrap from remote URL"
+  fi
+  if [[ -e "${INSTALL_DIR}" && "${FORCE}" -ne 1 ]]; then
+    warn "install directory already exists; rerun with --force to replace it"
+  fi
 }
 
 download_file() {
@@ -55,9 +119,11 @@ PY
 install_runtime_if_needed() {
   RUNTIME_BIN="${RUNTIME_ROOT}/dbtctl"
   if [[ -x "${RUNTIME_BIN}" ]]; then
+    info "shared runtime detected at: ${RUNTIME_ROOT}"
     return 0
   fi
 
+  info "shared runtime is missing; starting runtime bootstrap"
   local temp_dir
   temp_dir="$(mktemp -d)"
   trap 'rm -rf "${temp_dir}"' EXIT
@@ -115,7 +181,7 @@ EOF
   fi
 }
 
-while [[ $# -gt 0 ]]; do
+  while [[ $# -gt 0 ]]; do
   case "$1" in
     --install-dir)
       INSTALL_DIR="$2"
@@ -133,6 +199,10 @@ while [[ $# -gt 0 ]]; do
       RUNTIME_MANIFEST_URL="$2"
       shift 2
       ;;
+    --check-only)
+      CHECK_ONLY=1
+      shift
+      ;;
     --force)
       FORCE=1
       shift
@@ -148,6 +218,13 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+validate_environment
+print_environment_summary
+
+if [[ "${CHECK_ONLY}" -eq 1 ]]; then
+  exit 0
+fi
 
 install_runtime_if_needed
 
@@ -182,5 +259,8 @@ with open(target_path, "w", encoding="utf-8") as fh:
     fh.write("\n")
 PY
 
+require_file "${RUNTIME_CONFIG}" "runtime config was not written: ${RUNTIME_CONFIG}"
+
 echo "installed OpenCode plugin to: ${INSTALL_DIR}"
 echo "shared runtime: ${RUNTIME_ROOT}"
+echo "next step: restart OpenCode and open a new session"

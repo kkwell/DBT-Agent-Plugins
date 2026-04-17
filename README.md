@@ -62,6 +62,15 @@ Detailed installation guides:
 - [OpenCode installation](./opencode_plugin/docs/installation.md)
 - [Codex installation](./codex_plugin/docs/installation.md)
 
+Release entry for end users:
+
+- [release/README.md](./release/README.md)
+- generic installer:
+  - `./release/install.sh --platform <opencode|codex> --check-only`
+- platform installers:
+  - `./release/install-opencode.sh`
+  - `./release/install-codex.sh`
+
 ## OpenCode Demos
 
 Click a cover image to open the demo video.
