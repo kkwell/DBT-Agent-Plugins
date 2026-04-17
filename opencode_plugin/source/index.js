@@ -300,33 +300,18 @@ async function localAgentTool(toolName, args = {}, options = {}) {
   })
 }
 
-function findExecutableOnPath(names) {
-  const pathText = process.env.PATH || ""
-  if (!pathText) return ""
-  for (const dir of pathText.split(path.delimiter)) {
-    if (!dir) continue
-    for (const name of names) {
-      const candidate = path.join(dir, name)
-      if (existsSync(candidate)) return candidate
-    }
-  }
-  return ""
-}
-
-function toolkitRootFromExecutable(executablePath) {
-  const text = asString(executablePath)
-  if (!text) return ""
-  const normalized = path.resolve(text)
-  const appMarker = `${path.sep}Contents${path.sep}Resources${path.sep}toolkit-runtime${path.sep}`
-  const markerIndex = normalized.indexOf(appMarker)
-  if (markerIndex >= 0) {
-    return normalized.slice(0, markerIndex + appMarker.length - 1)
-  }
-  return path.dirname(normalized)
+function isToolkitRootCandidate(candidate) {
+  return (
+    existsSync(path.join(candidate, "VERSION")) ||
+    existsSync(path.join(candidate, "product_release")) ||
+    existsSync(path.join(candidate, "opencode_plugin")) ||
+    existsSync(path.join(candidate, "builtin-plugin-seed")) ||
+    existsSync(path.join(candidate, "editor_plugins")) ||
+    existsSync(path.join(candidate, "rkflashtool-mac"))
+  )
 }
 
 function resolveToolkitRoot() {
-  const pathExecutable = findExecutableOnPath(["dbtctl", "dbtctl-swift"])
   const candidates = [
     process.env.OPENCODE_DBT_ROOT || "",
     process.env.DBT_TOOLKIT_ROOT || "",
@@ -337,20 +322,16 @@ function resolveToolkitRoot() {
     path.join(homeDir(), "Library", "Application Support", "development-board-toolchain", "runtime"),
     path.join(homeDir(), "Library", "Application Support", "rk356x-mac-toolkit", "runtime"),
     path.resolve(pluginBaseDir(), "..", "development-board-toolchain-runtime"),
-    toolkitRootFromExecutable(pathExecutable),
     path.join(homeDir(), "rk356x-mac-toolkit"),
   ].filter(Boolean)
 
   for (const candidate of candidates) {
-    if (
-      existsSync(path.join(candidate, "dbtctl")) ||
-      existsSync(path.join(candidate, "dbtctl-swift"))
-    ) {
+    if (isToolkitRootCandidate(candidate)) {
       return candidate
     }
   }
 
-  throw new Error("Development Board Toolchain root not found. Install dbtctl/toolkit-runtime first, or set OPENCODE_DBT_ROOT.")
+  throw new Error("Development Board Toolchain runtime root not found. Install the shared runtime first, or set OPENCODE_DBT_ROOT.")
 }
 
 function resolveUpdateRepository() {
