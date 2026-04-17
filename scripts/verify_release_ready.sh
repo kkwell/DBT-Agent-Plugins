@@ -4,59 +4,66 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-python3 - "${REPO_ROOT}" <<'PY'
-import json
-import sys
-from pathlib import Path
+perl -MJSON::PP -MFile::Spec -e '
+  use strict;
+  use warnings;
 
-repo_root = Path(sys.argv[1])
+  my $decoder = JSON::PP->new->utf8;
+  my $repo_root = $ARGV[0];
 
-release_manifest_path = repo_root / "release" / "manifest.json"
-opencode_manifest_path = repo_root / "opencode_plugin" / "release" / "manifest.json"
-codex_manifest_path = repo_root / "codex_plugin" / "release" / "manifest.json"
+  sub join_path {
+      return File::Spec->catfile(@_);
+  }
 
-required_paths = [
-    release_manifest_path,
-    repo_root / "release" / "README.md",
-    repo_root / "release" / "install.sh",
-    repo_root / "release" / "install-opencode.sh",
-    repo_root / "release" / "install-codex.sh",
-    repo_root / "scripts" / "build_release_archives.sh",
-    repo_root / "scripts" / "publish_github_release.sh",
-    repo_root / "opencode_plugin" / "docs" / "installation.md",
-    repo_root / "codex_plugin" / "docs" / "installation.md",
-]
+  sub slurp_utf8 {
+      my ($path) = @_;
+      open my $fh, "<:encoding(UTF-8)", $path or die "unable to open $path: $!\n";
+      local $/;
+      my $content = <$fh>;
+      close $fh;
+      return $content;
+  }
 
-for path in required_paths:
-    if not path.exists():
-        raise SystemExit(f"missing required release file: {path}")
+  my $release_manifest_path = join_path($repo_root, "release", "manifest.json");
+  my $opencode_manifest_path = join_path($repo_root, "opencode_plugin", "release", "manifest.json");
+  my $codex_manifest_path = join_path($repo_root, "codex_plugin", "release", "manifest.json");
 
-with release_manifest_path.open("r", encoding="utf-8") as fh:
-    release_manifest = json.load(fh)
-with opencode_manifest_path.open("r", encoding="utf-8") as fh:
-    opencode_manifest = json.load(fh)
-with codex_manifest_path.open("r", encoding="utf-8") as fh:
-    codex_manifest = json.load(fh)
+  my @required_paths = (
+      $release_manifest_path,
+      join_path($repo_root, "release", "README.md"),
+      join_path($repo_root, "release", "install.sh"),
+      join_path($repo_root, "release", "install-opencode.sh"),
+      join_path($repo_root, "release", "install-codex.sh"),
+      join_path($repo_root, "scripts", "build_release_archives.sh"),
+      join_path($repo_root, "scripts", "publish_github_release.sh"),
+      join_path($repo_root, "opencode_plugin", "docs", "installation.md"),
+      join_path($repo_root, "codex_plugin", "docs", "installation.md"),
+  );
 
-release_version = release_manifest.get("version")
-opencode_version = opencode_manifest.get("version")
-codex_version = codex_manifest.get("version")
+  for my $path (@required_paths) {
+      die "missing required release file: $path\n" unless -e $path;
+  }
 
-if not release_version:
-    raise SystemExit("release manifest is missing version")
-if release_version != opencode_version or release_version != codex_version:
-    raise SystemExit(
-        "release version mismatch: "
-        f"release={release_version}, opencode={opencode_version}, codex={codex_version}"
-    )
+  my $release_manifest = $decoder->decode(slurp_utf8($release_manifest_path));
+  my $opencode_manifest = $decoder->decode(slurp_utf8($opencode_manifest_path));
+  my $codex_manifest = $decoder->decode(slurp_utf8($codex_manifest_path));
 
-release_assets = release_manifest.get("release_assets") or {}
-for platform in ("opencode", "codex"):
-    asset = release_assets.get(platform)
-    if not isinstance(asset, dict):
-        raise SystemExit(f"release asset metadata missing for platform: {platform}")
-    if not asset.get("zip") or not asset.get("tar_gz") or not asset.get("root_dir"):
-        raise SystemExit(f"incomplete release asset metadata for platform: {platform}")
+  my $release_version = $release_manifest->{version};
+  my $opencode_version = $opencode_manifest->{version};
+  my $codex_version = $codex_manifest->{version};
 
-print(f"release is ready for version {release_version}")
-PY
+  die "release manifest is missing version\n" unless $release_version;
+  if ($release_version ne $opencode_version || $release_version ne $codex_version) {
+      die "release version mismatch: release=$release_version, opencode=$opencode_version, codex=$codex_version\n";
+  }
+
+  my $release_assets = $release_manifest->{release_assets} || {};
+  for my $platform (qw(opencode codex)) {
+      my $asset = $release_assets->{$platform};
+      die "release asset metadata missing for platform: $platform\n" unless ref($asset) eq "HASH";
+      die "incomplete release asset metadata for platform: $platform\n"
+          unless $asset->{zip} && $asset->{tar_gz} && $asset->{root_dir};
+  }
+
+  print "release is ready for version $release_version\n";
+' "${REPO_ROOT}"
