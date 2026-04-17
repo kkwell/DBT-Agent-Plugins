@@ -21,6 +21,8 @@ required_paths = [
     repo_root / "release" / "install.sh",
     repo_root / "release" / "install-opencode.sh",
     repo_root / "release" / "install-codex.sh",
+    repo_root / "scripts" / "build_release_archives.sh",
+    repo_root / "scripts" / "publish_github_release.sh",
     repo_root / "opencode_plugin" / "docs" / "installation.md",
     repo_root / "codex_plugin" / "docs" / "installation.md",
 ]
@@ -47,6 +49,14 @@ if release_version != opencode_version or release_version != codex_version:
         "release version mismatch: "
         f"release={release_version}, opencode={opencode_version}, codex={codex_version}"
     )
+
+release_assets = release_manifest.get("release_assets") or {}
+for platform in ("opencode", "codex"):
+    asset = release_assets.get(platform)
+    if not isinstance(asset, dict):
+        raise SystemExit(f"release asset metadata missing for platform: {platform}")
+    if not asset.get("zip") or not asset.get("tar_gz") or not asset.get("root_dir"):
+        raise SystemExit(f"incomplete release asset metadata for platform: {platform}")
 
 print(f"release is ready for version {release_version}")
 PY

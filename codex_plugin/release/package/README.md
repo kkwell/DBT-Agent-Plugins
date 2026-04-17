@@ -29,6 +29,5 @@ The plugin is only a thin Codex wrapper. GUI, OpenCode, and Codex all use the sa
 - `.codex-plugin/plugin.json`
 - `.mcp.json`
 - `skills/`
-- `scripts/dbt_agent_mcp.py`
 
-During real installation, `release/install.sh` rewrites `.mcp.json` so Codex calls the runtime-shared MCP server script under the support-root runtime, not a duplicated plugin-local runtime.
+During real installation, `release/install.sh` rewrites `.mcp.json` so Codex calls the installed shared `dbt-agentd` binary directly.

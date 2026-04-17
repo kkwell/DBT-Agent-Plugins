@@ -2,7 +2,7 @@
   "product": "codex_plugin",
   "name": "dbt-agent",
   "display_name": "DBT-Agent",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "plugin_manifest": "package/.codex-plugin/plugin.json",
   "marketplace": "marketplace.json",
   "installer": "install.sh",

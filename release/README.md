@@ -2,6 +2,17 @@
 
 This directory is the user-facing release entry for installing a specific DBT-Agent platform plugin.
 
+End users should prefer the GitHub Releases page:
+
+- [DBT-Agent-Plugins Releases](https://github.com/kkwell/DBT-Agent-Plugins/releases)
+- download the platform-specific archive only
+- extract it and run the top-level `install.sh` or `install.command`
+
+Current archive naming:
+
+- `DBT-Agent-OpenCode-v1.0.6.zip`
+- `DBT-Agent-Codex-v1.0.6.zip`
+
 ## Choose Your Platform
 
 OpenCode:
@@ -30,14 +41,17 @@ Unified installer:
 - macOS host environment
 - required local release files
 - runtime presence
+- `dbt-agentd` binary presence
+- `dbt-agentd` local config presence
+- native `dbt-agentd --mcp-serve` readiness for Codex archives
 - writable install targets
 - platform home detection with warnings if the client has not been launched yet
-- for Codex only: `python3` availability, because Codex launches `dbt_agent_mcp.py` through `python3`
 
 ## Runtime Installation
 
-The shared DBT runtime is not auto-downloaded by these installers. It contains large cross-compilers
-and board toolchains, so users must download and install it offline first.
+The shared DBT runtime support package is not auto-downloaded by these installers. It contains large
+cross-compilers, board toolchains, and the shared local `dbt-agentd`, so users must download and
+install it offline first.
 
 Download link:
 
@@ -51,10 +65,8 @@ After the runtime is installed, rerun the platform installer:
 /bin/bash ./release/install-codex.sh --check-only
 ```
 
-## Why Codex Still Checks `python3`
-
-The Codex plugin launches the local MCP bridge script `dbt_agent_mcp.py` through `python3`.
-This requirement belongs to the Codex plugin wrapper itself, not to the offline DBT runtime package.
+If the Codex archive reports an MCP probe failure, the offline runtime package is still an older build.
+Update the runtime package first, then rerun the archive installer.
 
 ## Platform Docs
 
@@ -67,4 +79,5 @@ Before publishing a tag or a GitHub release, run:
 
 ```bash
 /bin/bash ./scripts/verify_release_ready.sh
+/bin/bash ./scripts/build_release_archives.sh
 ```

@@ -5,7 +5,7 @@ This directory is the self-contained source-of-truth project for the DBT-Agent C
 Everything required to maintain the Codex plugin lives under this directory:
 
 - `source/`
-  - authoritative plugin source code, marketplace seed, skills, assets, and MCP wrapper
+  - authoritative plugin source code, marketplace seed, skills, assets, and MCP entry config
 - `release/`
   - release-facing package structure, standalone installer, and manifest
 - `docs/`
@@ -64,15 +64,15 @@ GUI, OpenCode, and Codex all call the same runtime and `dbt-agentd`.
 - `source/plugin/.codex-plugin/plugin.json`
   - Codex plugin manifest
 - `source/plugin/.mcp.json`
-  - development-time MCP entry
-- `source/plugin/scripts/dbt_agent_mcp.py`
-  - Codex MCP tool server wrapper
+  - development-time MCP entry that points to `dbt-agentd`
 - `release/install.sh`
   - standalone installer for local Codex distribution
 - `release/manifest.json`
   - release metadata
 - `docs/installation.md`
   - operator install instructions
+- `../scripts/build_release_archives.sh`
+  - build end-user release archives with top-level install entry
 
 ## Maintenance rule
 

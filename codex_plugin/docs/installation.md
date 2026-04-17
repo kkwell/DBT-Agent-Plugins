@@ -15,10 +15,9 @@ The local marketplace entry is written to:
 ## Requirements
 
 - macOS
-- `python3`
-  - required because Codex launches `scripts/dbt_agent_mcp.py` through `python3`
 - Codex is recommended to be launched once before installation
 - the shared runtime is installed locally first
+- the shared `dbt-agentd` is installed locally first
 
 ## Preflight Check
 
@@ -33,7 +32,9 @@ The preflight check validates:
 - local release files
 - writable install targets
 - runtime availability
-- `python3` availability for the Codex MCP bridge
+- `dbt-agentd` binary availability
+- `dbt-agentd` local config availability
+- native `dbt-agentd --mcp-serve` response
 
 ## Recommended Install Flow
 
@@ -50,7 +51,7 @@ The preflight check validates:
 ## Install The Runtime First
 
 The Codex plugin installer does not auto-download the runtime.
-The runtime package is large because it contains board toolchains and cross-compilers, so users need to install it offline first.
+The runtime support package is large because it contains board toolchains, cross-compilers, and the shared local `dbt-agentd`, so users need to install it offline first.
 
 Download link:
 
@@ -73,7 +74,7 @@ After the runtime is installed, rerun:
 - Shared agent:
   - `dbt-agentd`
 
-The installer rewrites the plugin `.mcp.json` so Codex calls the shared runtime MCP script, not a duplicated plugin-local runtime.
+The installer rewrites the plugin `.mcp.json` so Codex calls the installed `dbt-agentd` binary directly in native MCP stdio mode.
 
 ## Verify The Installation
 
@@ -87,7 +88,8 @@ The installer rewrites the plugin `.mcp.json` so Codex calls the shared runtime 
 ## Troubleshooting
 
 - if the installer says the runtime is missing, install the offline runtime package first, then rerun the installer
-- if the installer says `python3` is missing, install `python3` first; this is required by the Codex MCP bridge, not by the offline runtime package
+- if the installer says `dbt-agentd` is missing, install the shared toolkit support package first, then rerun the installer
+- if the installer says the `dbt-agentd` MCP probe failed, the installed offline runtime package is too old; update it, then rerun the installer
 - if the install directory already exists, rerun with `--force`
 - if Codex does not show the plugin, restart Codex after installation
 

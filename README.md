@@ -65,20 +65,25 @@ Detailed installation guides:
 Release entry for end users:
 
 - [release/README.md](./release/README.md)
+- [GitHub Releases](https://github.com/kkwell/DBT-Agent-Plugins/releases)
 - generic installer:
   - `./release/install.sh --platform <opencode|codex> --check-only`
 - platform installers:
   - `./release/install-opencode.sh`
   - `./release/install-codex.sh`
+- downloadable archives:
+  - `DBT-Agent-OpenCode-v1.0.6.zip`
+  - `DBT-Agent-Codex-v1.0.6.zip`
 - offline runtime download:
   - [Baidu Netdisk runtime package](https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001)
   - password: `0001`
 
 Runtime note:
 
-- the shared DBT runtime is not auto-downloaded by this repository
+- the shared DBT runtime and `dbt-agentd` are not auto-downloaded by this repository
 - the runtime package is distributed offline because it contains large cross-compilers and board toolchains
-- Codex still requires `python3` locally because the Codex MCP bridge runs `dbt_agent_mcp.py` through `python3`
+- Codex now launches the installed `dbt-agentd` binary directly through native MCP stdio mode
+- the Codex installer runs a native MCP probe before install, so older runtime bundles are rejected early
 
 ## OpenCode Demos
 

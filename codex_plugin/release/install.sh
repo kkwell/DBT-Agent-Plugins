@@ -11,7 +11,8 @@ DEFAULT_CODEX_HOME="${HOME}/.codex"
 DEFAULT_PLUGIN_ROOT="${DEFAULT_CODEX_HOME}/.tmp/plugins"
 DEFAULT_INSTALL_DIR="${DEFAULT_PLUGIN_ROOT}/plugins/dbt-agent"
 DEFAULT_MARKETPLACE_PATH="${DEFAULT_PLUGIN_ROOT}/.agents/plugins/marketplace.json"
-DEFAULT_RUNTIME_ROOT="${HOME}/Library/Application Support/development-board-toolchain/runtime"
+DEFAULT_SUPPORT_ROOT="${HOME}/Library/Application Support/development-board-toolchain"
+DEFAULT_RUNTIME_ROOT="${DEFAULT_SUPPORT_ROOT}/runtime"
 
 INSTALL_DIR="${DEFAULT_INSTALL_DIR}"
 MARKETPLACE_PATH="${DEFAULT_MARKETPLACE_PATH}"
@@ -41,19 +42,103 @@ Options:
 EOF
 }
 
+support_root_for_runtime() {
+  dirname "$1"
+}
+
+agent_root_for_runtime() {
+  local runtime_root="$1"
+  printf '%s/agent' "$(support_root_for_runtime "${runtime_root}")"
+}
+
+agent_binary_for_runtime() {
+  local runtime_root="$1"
+  printf '%s/bin/dbt-agentd' "$(agent_root_for_runtime "${runtime_root}")"
+}
+
+agent_config_for_runtime() {
+  local runtime_root="$1"
+  printf '%s/config/dbt-agentd.local.json' "$(agent_root_for_runtime "${runtime_root}")"
+}
+
+validate_agent_mcp_server() {
+  local agent_binary="$1"
+  local agent_config="$2"
+  local probe_input
+  local probe_output
+
+  probe_input="$(mktemp)"
+  probe_output="$(mktemp)"
+
+  cat > "${probe_input}" <<'EOF'
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"dbt-agent-codex-installer","version":"1.0"}}}
+EOF
+
+  if ! perl -e '
+      use strict;
+      use warnings;
+      use IPC::Open3;
+      use Symbol qw(gensym);
+
+      my ($binary, $config, $input_path, $output_path) = @ARGV;
+      open my $in_fh, "<", $input_path or die "open input failed: $!";
+      local $/;
+      my $payload = <$in_fh>;
+      close $in_fh;
+
+      my $stderr = gensym();
+      my $pid = open3(my $writer, my $reader, $stderr, $binary, "--mcp-serve", "--config", $config);
+      print {$writer} $payload;
+      close $writer;
+
+      eval {
+          local $SIG{ALRM} = sub { die "timeout\n"; };
+          alarm 5;
+          open my $out_fh, ">", $output_path or die "open output failed: $!";
+          while (my $line = <$reader>) {
+              print {$out_fh} $line;
+              last if $line =~ /"result"\s*:/;
+          }
+          close $out_fh;
+          alarm 0;
+      };
+
+      my $error = $@;
+      close $reader;
+      close $stderr;
+      waitpid($pid, 0);
+
+      if ($error) {
+          exit 1;
+      }
+
+      exit 0;
+    ' "${agent_binary}" "${agent_config}" "${probe_input}" "${probe_output}"; then
+    rm -f "${probe_input}" "${probe_output}"
+    fail "shared dbt-agentd does not respond to '--mcp-serve'; update the offline runtime package from ${RUNTIME_DOWNLOAD_URL}"
+  fi
+
+  if ! grep -q '"serverInfo"' "${probe_output}"; then
+    rm -f "${probe_input}" "${probe_output}"
+    fail "shared dbt-agentd MCP probe failed; update the offline runtime package from ${RUNTIME_DOWNLOAD_URL}"
+  fi
+
+  rm -f "${probe_input}" "${probe_output}"
+}
+
 validate_release_layout() {
   require_dir "${PACKAGE_ROOT}" "release package not found: ${PACKAGE_ROOT}"
   require_file "${MARKETPLACE_SOURCE}" "release marketplace not found: ${MARKETPLACE_SOURCE}"
   require_file "${PACKAGE_ROOT}/.codex-plugin/plugin.json" \
     "plugin manifest not found: ${PACKAGE_ROOT}/.codex-plugin/plugin.json"
   require_file "${PACKAGE_ROOT}/.mcp.json" "plugin MCP config not found: ${PACKAGE_ROOT}/.mcp.json"
-  require_file "${PACKAGE_ROOT}/scripts/dbt_agent_mcp.py" \
-    "plugin MCP wrapper not found: ${PACKAGE_ROOT}/scripts/dbt_agent_mcp.py"
 }
 
 validate_environment() {
+  local agent_binary
+  local agent_config
+
   require_macos
-  require_command python3 "python3 is required by the Codex plugin to launch scripts/dbt_agent_mcp.py"
   validate_release_layout
   ensure_parent_dir "${INSTALL_DIR}"
   ensure_parent_dir "${MARKETPLACE_PATH}"
@@ -64,26 +149,45 @@ validate_environment() {
     warn "the installer will still continue, but launching Codex once before install is recommended"
   fi
 
-  local runtime_mcp_script="${RUNTIME_ROOT}/editor_plugins/codex/scripts/dbt_agent_mcp.py"
+  agent_binary="$(agent_binary_for_runtime "${RUNTIME_ROOT}")"
+  agent_config="$(agent_config_for_runtime "${RUNTIME_ROOT}")"
+
   if [[ ! -x "${RUNTIME_ROOT}/dbtctl" ]]; then
-    print_runtime_download_instructions "${RUNTIME_ROOT}" "${runtime_mcp_script}"
+    print_runtime_download_instructions "${RUNTIME_ROOT}" "${agent_binary}"
     exit 1
   fi
 
-  if [[ ! -f "${runtime_mcp_script}" ]]; then
-    print_runtime_download_instructions "${RUNTIME_ROOT}" "${runtime_mcp_script}"
+  if [[ ! -x "${agent_binary}" ]]; then
+    print_runtime_download_instructions "${RUNTIME_ROOT}" "${agent_binary}"
     exit 1
   fi
+
+  if [[ ! -f "${agent_config}" ]]; then
+    print_runtime_download_instructions "${RUNTIME_ROOT}" "${agent_config}"
+    exit 1
+  fi
+
+  validate_agent_mcp_server "${agent_binary}" "${agent_config}"
 }
 
 print_environment_summary() {
+  local agent_root
+  local agent_binary
+  local agent_config
+
+  agent_root="$(agent_root_for_runtime "${RUNTIME_ROOT}")"
+  agent_binary="$(agent_binary_for_runtime "${RUNTIME_ROOT}")"
+  agent_config="$(agent_config_for_runtime "${RUNTIME_ROOT}")"
+
   info "environment checks passed for Codex plugin release"
   print_summary_line "platform" "codex"
   print_summary_line "install dir" "${INSTALL_DIR}"
   print_summary_line "marketplace" "${MARKETPLACE_PATH}"
   print_summary_line "runtime root" "${RUNTIME_ROOT}"
-  print_summary_line "runtime status" "present"
-  print_summary_line "python3" "$(command -v python3)"
+  print_summary_line "agent root" "${agent_root}"
+  print_summary_line "agent binary" "${agent_binary}"
+  print_summary_line "agent config" "${agent_config}"
+  print_summary_line "runtime status" "present (native MCP ready)"
   if [[ -e "${INSTALL_DIR}" && "${FORCE}" -ne 1 ]]; then
     warn "install directory already exists; rerun with --force to replace it"
   fi
@@ -92,24 +196,36 @@ print_environment_summary() {
 write_runtime_mcp_config() {
   local target="$1"
   local runtime_root_json
-  local script_path_json
+  local agent_root
+  local agent_binary
+  local agent_config
+  local agent_root_json
+  local agent_binary_json
+  local agent_config_json
 
   runtime_root_json="$(json_escape "${RUNTIME_ROOT}")"
-  script_path_json="$(json_escape "${RUNTIME_ROOT}/editor_plugins/codex/scripts/dbt_agent_mcp.py")"
+  agent_root="$(agent_root_for_runtime "${RUNTIME_ROOT}")"
+  agent_binary="$(agent_binary_for_runtime "${RUNTIME_ROOT}")"
+  agent_config="$(agent_config_for_runtime "${RUNTIME_ROOT}")"
+  agent_root_json="$(json_escape "${agent_root}")"
+  agent_binary_json="$(json_escape "${agent_binary}")"
+  agent_config_json="$(json_escape "${agent_config}")"
 
   cat > "${target}" <<EOF
 {
   "mcpServers": {
     "dbt-agent": {
-      "command": "python3",
+      "command": "${agent_binary_json}",
       "args": [
-        "${script_path_json}"
+        "--mcp-serve",
+        "--config",
+        "${agent_config_json}"
       ],
       "cwd": ".",
       "env": {
-        "PYTHONUNBUFFERED": "1",
         "DBT_TOOLKIT_ROOT": "${runtime_root_json}",
         "RK356X_TOOLKIT_ROOT": "${runtime_root_json}",
+        "DBT_AGENT_INSTALL_DIR": "${agent_root_json}",
         "DBT_TELEMETRY_SOURCE": "codex_plugin",
         "DBT_CLIENT_KIND": "codex_plugin"
       }
@@ -183,4 +299,5 @@ require_file "${MARKETPLACE_PATH}" "Codex marketplace entry was not written: ${M
 echo "installed Codex plugin to: ${INSTALL_DIR}"
 echo "local marketplace: ${MARKETPLACE_PATH}"
 echo "shared runtime: ${RUNTIME_ROOT}"
+echo "shared agent: $(agent_root_for_runtime "${RUNTIME_ROOT}")"
 echo "next step: restart Codex and confirm that DBT-Agent appears in the plugin list"

@@ -36,11 +36,11 @@ This plugin does not embed a local runtime copy.
 It always uses the shared runtime installed at:
 
 - `~/Library/Application Support/development-board-toolchain/runtime`
+- and the shared local backend agent at:
+- `~/Library/Application Support/development-board-toolchain/agent`
 
-If the runtime is missing, `release/install.sh` can either:
-
-- use an already installed runtime
-- or bootstrap the runtime from a remote installer URL / manifest URL
+The installer does not auto-download the runtime support package. Users should install the offline
+runtime support package first, then run the plugin installer.
 
 ## Main files
 
@@ -58,6 +58,8 @@ If the runtime is missing, `release/install.sh` can either:
   - runtime config template shipped with the plugin
 - `docs/installation.md`
   - operator install instructions
+- `../scripts/build_release_archives.sh`
+  - build end-user release archives with top-level install entry
 
 ## Maintenance rule
 

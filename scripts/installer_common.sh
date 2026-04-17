@@ -76,11 +76,12 @@ print_runtime_download_instructions() {
   local runtime_root="$1"
   local extra_requirement="${2:-}"
   cat >&2 <<EOF
-error: shared runtime not found at:
+error: shared Development Board Toolchain support files are not ready at:
   ${runtime_root}
 
-The DBT runtime is distributed as an offline package because it contains large cross-compilers
-and board toolchains. Download and install the runtime first, then rerun this installer.
+The DBT runtime support package is distributed as an offline package because it contains large
+cross-compilers, board toolchains, and the shared local dbt-agentd. Download and install it
+first, then rerun this installer.
 
 Download link:
   ${RUNTIME_DOWNLOAD_URL}
