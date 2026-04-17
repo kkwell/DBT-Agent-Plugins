@@ -1,6 +1,10 @@
 # DBT-Agent Platform Plugins
 
-This document is the external-facing summary for platform plugin delivery under `platform_plugin/`.
+This document is the extended project note for platform plugin delivery under `platform_plugin/`.
+
+For the repository homepage overview, installation entry points, and demo links, see:
+
+- [README.md](./README.md)
 
 Each platform plugin project must stay self-contained inside its own folder.
 Files outside `platform_plugin/` are not part of the authoritative plugin project layout.
