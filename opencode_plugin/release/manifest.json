@@ -1,6 +1,7 @@
 {
   "product": "opencode_plugin",
-  "name": "development-board-toolchain",
+  "name": "DBT-Agent",
+  "package_name": "dbt-agent",
   "version": "1.0.6",
   "entry": "package/index.js",
   "installer": "install.sh",

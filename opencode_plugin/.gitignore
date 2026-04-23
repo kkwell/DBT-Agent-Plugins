@@ -1,4 +1,6 @@
 node_modules/
 *.DS_Store
+source/development-board-toolchain.runtime.json
+release/package/development-board-toolchain.runtime.json
 source/*.update-state.json
 release/package/*.update-state.json

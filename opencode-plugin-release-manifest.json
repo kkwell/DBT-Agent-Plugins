@@ -1,0 +1,6 @@
+{
+  "name": "DBT-Agent OpenCode Plugin",
+  "version": "1.0.6",
+  "repository_url": "https://github.com/kkwell/DBT-Agent-Plugins.git",
+  "notes": "OpenCode checks this manifest for version metadata, then falls back to cloning the repository and running the bundled OpenCode installer."
+}

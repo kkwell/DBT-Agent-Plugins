@@ -28,7 +28,9 @@ Key capabilities:
 - board config and capability context lookup
 - local runtime execution through the shared Development Board Toolchain runtime
 - local build / deploy / log collection workflows
+- TaishanPi/Linux-board factory image flashing through `dbt_flash_image` and non-blocking `dbt_start_flash_image` + `dbt_get_job_status`
 - plugin update checks and runtime-aware installation
+- structured tool-failure reporting through `dbt-agentd`
 
 Important directories:
 
@@ -46,26 +48,80 @@ Important directories:
 All platform plugins share one local runtime root:
 
 - `~/Library/Application Support/development-board-toolchain/runtime`
+- board-family assets resolve from:
+  - `~/Library/Application Support/development-board-toolchain/families/`
 
 Platform plugins themselves install into platform-specific client directories.
 
 For OpenCode:
 
-- plugin directory:
-  - `~/.config/opencode/plugins/development-board-toolchain`
+- plugin package/module:
+  - `dbt-agent`
+- installed module directory:
+  - `~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent`
+- local fallback tarball staging:
+  - `~/.config/opencode/vendor/dbt-agent`
+- repository-driven update sources:
+  - `VERSION`
+  - `opencode-plugin-release-manifest.json`
+  - `https://github.com/kkwell/DBT-Agent-Plugins.git`
 - shared runtime:
   - `~/Library/Application Support/development-board-toolchain/runtime`
+
+The OpenCode plugin should present itself as:
+
+- plugin display name:
+  - `DBT-Agent`
+- plugin description:
+  - `development-board-toolchain`
+
+OpenCode board operations are installed-runtime only. The plugin must call local `dbt-agentd`
+tools and runtime files under Application Support; it must not use `DBT-Agent-Project`,
+`docker-project`, or source-checkout `dbtctl` paths for normal board control.
+
+For TaishanPi initialization-image or full-board image flashing, OpenCode has two paths:
+
+- blocking validation or short jobs:
+  - `dbt_flash_image` / `dbtflashimage`
+- long real downloads and flashing:
+  - `dbt_start_flash_image` / `dbtflashstart` to create the local `POST /v1/jobs/flash` job
+  - `dbt_get_job_status` / `dbtjobstatus` to poll `/v1/jobs/{job_id}` for `progress_percent`,
+    `progress_stage`, `progress_text`, `status_label`, `output_tail`, terminal state, and failure summary
+
+`dbt-agentd` owns running/download-mode detection and the actual flashing workflow.
+
+The default OpenCode tool surface is intentionally trimmed for Gemini tool-call reliability. It exposes
+no-underscore alias tools such as `dbtstatus`, `dbtflashimage`, `dbtflashstart`, `dbtjobstatus`,
+`dbtenvcheck`, `dbtboardconfig`, `dbtcapabilities`, `dbtcpufrequency`, `dbtwirelessprobe`,
+`dbtwifiscan`, and `dbtbluetoothscan`.
+These aliases route to the canonical local `dbt-agentd` APIs and avoid the OpenCode/Gemini empty
+response observed with external plugin tool ids containing underscores. Development sessions can
+expose the canonical underscore tool ids with `DBT_OPENCODE_EXPOSE_ADVANCED_TOOLS=true`.
+
+For responsiveness, `dbtstatus` and knowledge-only board resolution for `dbtcapabilities` prefer the
+cached local status summary first; explicit refresh wording still routes to the live status path.
+
+If OpenCode/Gemini reports `UNKNOWN_CERTIFICATE_VERIFICATION_ERROR`, the failure happens in the
+provider request before DBT tools execute. The DBT plugin cannot emit a DBT-specific tool result in
+that chat turn; launch OpenCode with `NODE_EXTRA_CA_CERTS=/etc/ssl/cert.pem` or handle it in a
+launcher/preflight UI.
 
 ## OpenCode install flow
 
 1. Ensure the shared runtime is installed.
-2. Run:
+2. If `dbt-agent` is already published to npm, run:
+
+```bash
+opencode plugin dbt-agent
+```
+
+3. For local release testing before npm publication, run:
 
 ```bash
 /bin/bash ./opencode_plugin/release/install.sh --force
 ```
 
-3. Restart OpenCode and open a new session.
+4. Restart OpenCode and open a new session.
 
 ## Update responsibility
 
@@ -75,6 +131,14 @@ For OpenCode:
   - distributed from `opencode_plugin/release/`
 - board plugins:
   - distributed independently from their own release channel
+
+## Failure telemetry rule
+
+Structured tool-failure and tool-event collection follows the runtime protocol defined in:
+
+- [../dbt-agentd/dbt-agentd-project/protocols/LOCAL_TOOL_EVENT_PROTOCOL.md](../dbt-agentd/dbt-agentd-project/protocols/LOCAL_TOOL_EVENT_PROTOCOL.md)
+
+Platform plugins may submit structured local failures to `dbt-agentd`, but must not upload them directly to a remote server.
 
 ## Maintenance rule
 
@@ -97,6 +161,7 @@ Key capabilities:
 - shared runtime execution through the shared Development Board Toolchain runtime
 - RP2350 BOOTSEL, flash, verify, run, and serial log workflows
 - TaishanPi chip-control, wireless probe, and build-run workflows
+- TaishanPi Loader/download-mode switching through `dbt_reboot_loader`; this is a runtime-control tool path, not a capability lookup path
 - plugin update checks and runtime-aware installation support
 
 Important directories:
@@ -118,11 +183,11 @@ Codex uses the same shared runtime root:
 
 The local Codex plugin package installs into:
 
-- `~/.codex/.tmp/plugins/plugins/dbt-agent`
+- `~/.codex/plugins/dbt-agent`
 
 The local Codex marketplace entry installs into:
 
-- `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`
+- `~/.agents/plugins/marketplace.json`
 
 ## Codex install flow
 
@@ -135,6 +200,22 @@ The local Codex marketplace entry installs into:
 
 3. Restart Codex.
 4. Open the plugin list and use `DBT-Agent`.
+
+## Codex CLI usage
+
+Codex CLI uses the same installed local plugin and MCP bridge as Codex Desktop. Confirm the entry with:
+
+```bash
+codex mcp list
+```
+
+For terminal-driven TaishanPi Loader switching, ask Codex CLI to call the DBT tool directly:
+
+```bash
+codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 DBT-Agent 将当前 TaishanPi 切换到 Loader 模式。直接调用 dbt_reboot_loader，不要查 capability，不要运行 shell。完成后调用 dbt_current_board_status 确认 USB mode。'
+```
+
+Normal board operations must resolve to the installed runtime under `~/Library/Application Support/development-board-toolchain/`, not to source-checkout binaries.
 
 ## Codex maintenance rule
 

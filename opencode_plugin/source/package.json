@@ -1,7 +1,40 @@
 {
-  "name": "development-board-toolchain-opencode-config",
-  "private": true,
+  "name": "dbt-agent",
+  "version": "1.0.6",
+  "description": "DBT-Agent OpenCode plugin for development-board-toolchain board control, capability planning, flashing, and environment tooling.",
+  "main": "./index.js",
   "type": "module",
+  "files": [
+    "index.js",
+    "postinstall.mjs",
+    "development-board-toolchain.runtime.template.json"
+  ],
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.mjs"
+  },
+  "keywords": [
+    "dbt-agent",
+    "development-board-toolchain",
+    "opencode",
+    "plugin",
+    "embedded",
+    "rp2350",
+    "taishanpi"
+  ],
+  "author": "kvell",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/kkwell/DBT-Agent-Plugins/tree/main/opencode_plugin#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kkwell/DBT-Agent-Plugins.git",
+    "directory": "opencode_plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/kkwell/DBT-Agent-Plugins/issues"
+  },
   "dependencies": {
     "@opencode-ai/plugin": "1.3.15"
   }

@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { execFile, spawn } from "node:child_process"
@@ -67,7 +67,8 @@ function resolveUpdateManifestSource() {
   return (
     asString(process.env.DBT_OPENCODE_UPDATE_MANIFEST_URL) ||
     asString(process.env.OPENCODE_DBT_UPDATE_MANIFEST_URL) ||
-    asString(runtime.updateManifestURL)
+    asString(runtime.updateManifestURL) ||
+    "https://raw.githubusercontent.com/kkwell/DBT-Agent-Plugins/main/opencode-plugin-release-manifest.json"
   )
 }
 
@@ -133,6 +134,171 @@ function withClientContext(payload) {
       client_type: asString(nested.client_type) || asString(payload.client_type) || context.client_type,
       request_id: asString(nested.request_id) || asString(payload.request_id) || context.request_id,
     },
+  }
+}
+
+function defaultToolEventRawRoot() {
+  return path.join(
+    homeDir(),
+    "Library",
+    "Application Support",
+    "development-board-toolchain",
+    "agent",
+    "insights",
+    "raw",
+    "tool-events",
+  )
+}
+
+function toolEventSensitiveKey(key) {
+  const lowered = String(key || "").trim().toLowerCase()
+  return [
+    "password",
+    "passphrase",
+    "psk",
+    "token",
+    "api_key",
+    "apikey",
+    "secret",
+    "authorization",
+    "cookie",
+    "credential",
+    "credentials",
+    "bearer",
+    "otp",
+    "mfa",
+  ].some((item) => lowered.includes(item))
+}
+
+function toolEventPathKey(key) {
+  const lowered = String(key || "").trim().toLowerCase()
+  return ["path", "file", "dir", "root", "workspace"].some((item) => lowered.includes(item))
+}
+
+function toolEventLargeContentKey(key) {
+  const lowered = String(key || "").trim().toLowerCase()
+  return [
+    "source",
+    "request",
+    "content",
+    "markdown",
+    "evidence",
+    "stdout",
+    "stderr",
+    "output",
+    "log",
+    "logs",
+    "prompt",
+  ].some((item) => lowered.includes(item))
+}
+
+function compactTelemetryPath(raw) {
+  const normalized = String(raw || "").replaceAll("\\", "/").trim()
+  if (!normalized) return ""
+  const parts = normalized.split("/").filter(Boolean)
+  if (!parts.length) return normalized
+  if (parts.length === 1) return parts[0]
+  return `.../${parts.slice(-2).join("/")}`
+}
+
+function sanitizeToolEventValue(value, keyPath = []) {
+  const currentKey = String(keyPath[keyPath.length - 1] || "")
+  if (value == null) return null
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeToolEventValue(item, keyPath.concat("[]")))
+  }
+  if (typeof value === "object") {
+    const out = {}
+    for (const key of Object.keys(value).sort()) {
+      out[key] = sanitizeToolEventValue(value[key], keyPath.concat(key))
+    }
+    return out
+  }
+  if (typeof value === "boolean" || typeof value === "number") {
+    return value
+  }
+  const text = String(value || "").trim()
+  if (!text) return ""
+  if (toolEventSensitiveKey(currentKey)) {
+    return "<redacted>"
+  }
+  if (toolEventPathKey(currentKey)) {
+    return compactTelemetryPath(text)
+  }
+  if (toolEventLargeContentKey(currentKey)) {
+    return `<omitted len=${text.length}>`
+  }
+  if (text.length > 512) {
+    return `${text.slice(0, 512)}...(truncated len=${text.length})`
+  }
+  return text
+}
+
+function buildToolEventPayload(partial = {}) {
+  const payload = withClientContext({
+    source: "opencode_plugin",
+    ...partial,
+  })
+  const toolArguments =
+    partial.tool_arguments && typeof partial.tool_arguments === "object" && !Array.isArray(partial.tool_arguments)
+      ? partial.tool_arguments
+      : {}
+  return {
+    protocol_version: "dbt-tool-event-v1",
+    source: "opencode_plugin",
+    occurred_at: asString(payload.occurred_at) || isoNow(),
+    event_stage: asString(payload.event_stage) || "plugin_transport",
+    transport: asString(payload.transport) || "opencode_local_http",
+    tool_name: asString(payload.tool_name) || asString(payload.operation_name) || "unknown_tool",
+    request_context:
+      payload.request_context && typeof payload.request_context === "object" && !Array.isArray(payload.request_context)
+        ? payload.request_context
+        : defaultClientContext(),
+    tool_arguments: sanitizeToolEventValue(toolArguments, ["tool_arguments"]),
+    ok: payload.ok === true,
+    retryable: payload.retryable === true,
+    duration_ms: Number.isFinite(Number(payload.duration_ms)) ? Math.max(0, Math.floor(Number(payload.duration_ms))) : undefined,
+    board_id: asString(payload.board_id) || asString(toolArguments.board_id) || asString(toolArguments.board),
+    variant_id: asString(payload.variant_id) || asString(toolArguments.variant_id) || asString(toolArguments.variant),
+    capability_id: asString(payload.capability_id) || asString(toolArguments.capability_id) || asString(toolArguments.capability),
+    device_id: asString(payload.device_id) || asString(toolArguments.device_id),
+    error_code: asString(payload.error_code),
+    error_message: excerptText(asString(payload.error_message || payload.error || "")),
+    summary_for_user: excerptText(asString(payload.summary_for_user || payload.summary || "")),
+    stdout_excerpt: excerptText(asString(payload.stdout_excerpt || "")),
+    stderr_excerpt: excerptText(asString(payload.stderr_excerpt || "")),
+    metadata: sanitizeToolEventValue(payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {}, ["metadata"]),
+  }
+}
+
+function writeFallbackToolEvent(eventPayload) {
+  try {
+    const occurredAt = asString(eventPayload.occurred_at) || isoNow()
+    const dateBucket = occurredAt.slice(0, 10) || "unknown-date"
+    const root = path.join(defaultToolEventRawRoot(), dateBucket)
+    mkdirSync(root, { recursive: true })
+    const target = path.join(
+      root,
+      `tool-event-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.json`,
+    )
+    writeFileSync(target, JSON.stringify(eventPayload, null, 2) + "\n", "utf8")
+  } catch {
+    // ignore emergency fallback write failures
+  }
+}
+
+async function bestEffortSubmitToolEvent(partial = {}) {
+  const payload = buildToolEventPayload(partial)
+  try {
+    const url = new URL("/v1/tool-events/submit", localAgentBaseURL()).toString()
+    await requestJSON(url, {
+      method: "POST",
+      payload,
+      timeoutMs: 1500,
+    })
+    return
+  } catch {
+    writeFallbackToolEvent(payload)
   }
 }
 
@@ -278,7 +444,94 @@ async function localAgentJSON(pathname, options = {}) {
   if (method === "POST" && nextOptions.payload && typeof nextOptions.payload === "object" && !Array.isArray(nextOptions.payload)) {
     nextOptions.payload = withClientContext(nextOptions.payload)
   }
-  return requestJSON(url, nextOptions)
+  const startedAt = Date.now()
+  const derivedArguments =
+    options.toolEvent && options.toolEvent.tool_arguments && typeof options.toolEvent.tool_arguments === "object" && !Array.isArray(options.toolEvent.tool_arguments)
+      ? options.toolEvent.tool_arguments
+      : (method === "POST"
+        ? (
+          nextOptions.payload &&
+          typeof nextOptions.payload === "object" &&
+          !Array.isArray(nextOptions.payload) &&
+          nextOptions.payload.arguments &&
+          typeof nextOptions.payload.arguments === "object" &&
+          !Array.isArray(nextOptions.payload.arguments)
+            ? nextOptions.payload.arguments
+            : nextOptions.payload
+        )
+        : {})
+  try {
+    const response = await requestJSON(url, nextOptions)
+    if (
+      pathname !== "/v1/tool-events/submit" &&
+      response &&
+      typeof response === "object" &&
+      !Array.isArray(response) &&
+      (response.ok === false || response.tool_error === true)
+    ) {
+      await bestEffortSubmitToolEvent({
+        event_stage: "plugin_response",
+        transport: asString(options.toolEvent?.transport) || "opencode_local_http",
+        tool_name: asString(options.toolEvent?.tool_name) || pathname,
+        tool_arguments: derivedArguments,
+        request_context:
+          nextOptions.payload &&
+          typeof nextOptions.payload === "object" &&
+          !Array.isArray(nextOptions.payload) &&
+          nextOptions.payload.request_context &&
+          typeof nextOptions.payload.request_context === "object"
+            ? nextOptions.payload.request_context
+            : options.toolEvent?.request_context,
+        duration_ms: Date.now() - startedAt,
+        ok: false,
+        retryable: response.retryable === true,
+        error_code: asString(response.error_code) || "agent_reported_failure",
+        error_message: asString(response.error_message || response.error || ""),
+        summary_for_user: asString(response.summary_for_user || response.summary || ""),
+        stdout_excerpt: asString(response.stdout_excerpt || ""),
+        stderr_excerpt: asString(response.stderr_excerpt || ""),
+        board_id: asString(response.board_id),
+        variant_id: asString(response.variant_id),
+        capability_id: asString(response.capability_id),
+        device_id: asString(response.device_id),
+        metadata: {
+          pathname,
+          method,
+          source_client: "opencode_plugin",
+        },
+      })
+    }
+    return response
+  } catch (error) {
+    if (pathname !== "/v1/tool-events/submit") {
+      const classified = classifyToolError(error)
+      await bestEffortSubmitToolEvent({
+        event_stage: "plugin_transport",
+        transport: asString(options.toolEvent?.transport) || "opencode_local_http",
+        tool_name: asString(options.toolEvent?.tool_name) || pathname,
+        tool_arguments: derivedArguments,
+        request_context:
+          nextOptions.payload &&
+          typeof nextOptions.payload === "object" &&
+          !Array.isArray(nextOptions.payload) &&
+          nextOptions.payload.request_context &&
+          typeof nextOptions.payload.request_context === "object"
+            ? nextOptions.payload.request_context
+            : options.toolEvent?.request_context,
+        duration_ms: Date.now() - startedAt,
+        ok: false,
+        retryable: classified.retryable === true,
+        error_code: classified.code,
+        error_message: asString(error?.message || String(error || "")),
+        metadata: {
+          pathname,
+          method,
+          source_client: "opencode_plugin",
+        },
+      })
+    }
+    throw error
+  }
 }
 
 async function tryLocalAgentJSON(pathname, options = {}) {
@@ -297,6 +550,11 @@ async function localAgentTool(toolName, args = {}, options = {}) {
       arguments: args,
     },
     timeoutMs: options.timeoutMs || 8000,
+    toolEvent: {
+      tool_name: toolName,
+      tool_arguments: args,
+      transport: "opencode_local_api_tool_execute",
+    },
   })
 }
 
@@ -340,7 +598,7 @@ function resolveUpdateRepository() {
     asString(process.env.DBT_OPENCODE_UPDATE_REPO) ||
     asString(process.env.OPENCODE_DBT_UPDATE_REPO) ||
     asString(runtime.updateRepository) ||
-    "https://github.com/kkwell/DBT-Agent.git"
+    "https://github.com/kkwell/DBT-Agent-Plugins.git"
   )
 }
 
@@ -350,8 +608,27 @@ function resolveUpdateVersionSource() {
     asString(process.env.DBT_OPENCODE_UPDATE_VERSION_URL) ||
     asString(process.env.OPENCODE_DBT_UPDATE_VERSION_URL) ||
     asString(runtime.updateVersionURL) ||
-    "https://raw.githubusercontent.com/kkwell/DBT-Agent/main/VERSION"
+    "https://raw.githubusercontent.com/kkwell/DBT-Agent-Plugins/main/VERSION"
   )
+}
+
+function readPackageVersion(packageRoot) {
+  try {
+    const packagePath = path.join(packageRoot, "package.json")
+    if (!existsSync(packagePath)) return ""
+    const parsed = JSON.parse(readFileSync(packagePath, "utf8"))
+    return asString(parsed?.version)
+  } catch {
+    return ""
+  }
+}
+
+function readLocalPluginVersion() {
+  return readPackageVersion(pluginBaseDir())
+}
+
+function readLocalUpdateVersion(toolkitRoot) {
+  return readLocalPluginVersion() || readLocalToolkitVersion(toolkitRoot)
 }
 
 function isDirectoryPath(targetPath) {
@@ -360,6 +637,27 @@ function isDirectoryPath(targetPath) {
   } catch {
     return false
   }
+}
+
+function localUpdateSourcesAllowed() {
+  return boolValue(process.env.DBT_OPENCODE_ALLOW_LOCAL_UPDATE_SOURCE) ||
+    boolValue(process.env.OPENCODE_DBT_ALLOW_LOCAL_UPDATE_SOURCE)
+}
+
+function isLocalFilesystemSource(source) {
+  const text = asString(source)
+  if (!text || isHttpURL(text)) return false
+  if (text.startsWith("file://")) return true
+  if (path.isAbsolute(text)) return true
+  if (text.startsWith("./") || text.startsWith("../")) return true
+  return existsSync(text)
+}
+
+function assertUpdateSourceAllowed(source, label) {
+  if (!isLocalFilesystemSource(source) || localUpdateSourcesAllowed()) return
+  throw new Error(
+    `${label} must be an HTTP(S) release manifest or repository URL in installed OpenCode mode. Local filesystem update sources are disabled so the plugin does not execute development-tree scripts.`
+  )
 }
 
 function isLikelyRepositorySource(source) {
@@ -408,7 +706,7 @@ async function checkPluginUpdateNow(toolkitRoot) {
   const manifestSource = resolveUpdateManifestSource()
   const versionSource = resolveUpdateVersionSource()
   const repositorySource = resolveUpdateRepository()
-  const localVersion = readLocalToolkitVersion(installRoot)
+  const localVersion = readLocalUpdateVersion(installRoot)
 
   let manifestError = ""
   if (manifestSource) {
@@ -555,8 +853,10 @@ function inferInstallRoot(toolkitRoot) {
   if (normalized.endsWith(appMarker)) {
     return defaultStandaloneRuntimeRoot()
   }
-  const pluginRuntimeMarker = `${path.sep}.config${path.sep}opencode${path.sep}plugins${path.sep}development-board-toolchain${path.sep}runtime`
-  if (normalized.endsWith(pluginRuntimeMarker)) {
+  const legacyPluginRuntimeMarker = `${path.sep}.config${path.sep}opencode${path.sep}plugins${path.sep}development-board-toolchain${path.sep}runtime`
+  const moduleRuntimeMarker = `${path.sep}.config${path.sep}opencode${path.sep}node_modules${path.sep}dbt-agent${path.sep}runtime`
+  const packageCacheRuntimeMarker = `${path.sep}.cache${path.sep}opencode${path.sep}packages${path.sep}dbt-agent@latest${path.sep}node_modules${path.sep}dbt-agent${path.sep}runtime`
+  if (normalized.endsWith(legacyPluginRuntimeMarker) || normalized.endsWith(moduleRuntimeMarker) || normalized.endsWith(packageCacheRuntimeMarker)) {
     return defaultStandaloneRuntimeRoot()
   }
   return normalized
@@ -582,13 +882,14 @@ function maybeStartBackgroundUpdateCheck(toolkitRoot) {
   }
   writeUpdateState(nextState)
 
-  const worker = `
+const worker = `
 import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
 
 const statePath = ${JSON.stringify(updateStatePath())};
 const toolkitRoot = ${JSON.stringify(toolkitRoot)};
+const pluginRoot = ${JSON.stringify(pluginBaseDir())};
 const manifestSource = ${JSON.stringify(resolveUpdateManifestSource())};
 const versionSource = ${JSON.stringify(resolveUpdateVersionSource())};
 
@@ -608,6 +909,14 @@ function writeState(nextState) {
 }
 
 function readLocalVersion(root) {
+  try {
+    const packagePath = path.join(pluginRoot, "package.json");
+    if (fs.existsSync(packagePath)) {
+      const parsed = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+      const version = typeof parsed?.version === "string" ? parsed.version.trim() : "";
+      if (version) return version;
+    }
+  } catch {}
   try {
     const target = path.join(root, "VERSION");
     if (!fs.existsSync(target)) return "unknown";
@@ -867,14 +1176,54 @@ function normalizeUserDBTText(text) {
   if (!trimmed) return raw
 
   const lowered = trimmed.toLowerCase()
+  if (
+    lowered === "当前开发板状态" ||
+    lowered === "开发板状态" ||
+    lowered === "当前板卡状态" ||
+    lowered === "查看当前开发板状态" ||
+    lowered.includes("current board status")
+  ) {
+    return "Call the exact DBT alias tool dbtstatus with request \"current board status\". Then summarize the result."
+  }
+  if (
+    (trimmed.includes("初始化镜像") || trimmed.includes("出厂镜像") || trimmed.includes("factory")) &&
+    (trimmed.includes("烧录") || trimmed.includes("刷写") || trimmed.includes("flash"))
+  ) {
+    const dryRun = trimmed.includes("dry") || trimmed.includes("验证") || trimmed.includes("不真实") || trimmed.includes("不要真实")
+    const args = {
+      image_source: "factory",
+      scope: "all",
+      ...(dryRun ? { dry_run: "true" } : {}),
+    }
+    if (dryRun) {
+      return `Call the exact DBT alias tool dbtflashimage with request "TaishanPi factory image flashing dry run" and arguments_json ${JSON.stringify(args)}. Then summarize the result.`
+    }
+    return `Call the exact DBT alias tool dbtflashstart with request "Start TaishanPi factory image flashing" and arguments_json ${JSON.stringify(args)}. Then call the exact DBT alias tool dbtjobstatus with the returned job_id and summarize current progress.`
+  }
   if (lowered === "cpu频率是多少" || lowered === "cpu频率") {
-    return "查看CPU当前频率"
+    return "Call the exact DBT alias tool dbtcpufrequency with request \"current CPU frequency\". Then summarize the result."
   }
   if (lowered === "ddr频率是多少" || lowered === "ddr频率") {
-    return "查看DDR当前频率"
+    return "Call the exact DBT alias tool dbtddrfrequency with request \"current DDR frequency\". Then summarize the result."
   }
   if (lowered === "cpu温度是多少" || lowered === "cpu温度") {
-    return "查看CPU温度"
+    return "Call the exact DBT alias tool dbtcputemperature with request \"current CPU temperature\". Then summarize the result."
+  }
+  if (trimmed.includes("wifi") || trimmed.includes("WiFi") || trimmed.includes("无线")) {
+    if (trimmed.includes("扫描") || trimmed.includes("scan")) {
+      return "Call the exact DBT alias tool dbtwirelessprobe with request \"WiFi scan\" and arguments_json {\"target\":\"wifi_scan\"}. Then summarize the result."
+    }
+    if (trimmed.includes("状态") || trimmed.includes("模块") || trimmed.includes("status")) {
+      return "Call the exact DBT alias tool dbtwirelessprobe with request \"WiFi status\" and arguments_json {\"target\":\"wifi_status\"}. Then summarize the result."
+    }
+  }
+  if (trimmed.includes("蓝牙") || lowered.includes("bluetooth")) {
+    if (trimmed.includes("扫描") || trimmed.includes("scan")) {
+      return "Call the exact DBT alias tool dbtbluetoothscan with request \"Bluetooth scan\". Then summarize the result."
+    }
+    if (trimmed.includes("状态") || trimmed.includes("模块") || trimmed.includes("status")) {
+      return "Call the exact DBT alias tool dbtwirelessprobe with request \"Bluetooth status\" and arguments_json {\"target\":\"bluetooth_status\"}. Then summarize the result."
+    }
   }
 
   return trimmed
@@ -1358,10 +1707,30 @@ async function waitForAgentJob(jobID, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 60000)
   const pollIntervalMs = Number(options.pollIntervalMs || 500)
   const startedAt = Date.now()
+  const toolEvent =
+    options.toolEvent && typeof options.toolEvent === "object" && !Array.isArray(options.toolEvent)
+      ? options.toolEvent
+      : {}
+  const toolArguments =
+    toolEvent.tool_arguments && typeof toolEvent.tool_arguments === "object" && !Array.isArray(toolEvent.tool_arguments)
+      ? {
+          ...toolEvent.tool_arguments,
+          job_id: jobID,
+        }
+      : { job_id: jobID }
 
   while (Date.now() - startedAt < timeoutMs) {
     const payload = await localAgentJSON(`/v1/jobs/${encodeURIComponent(jobID)}`, {
       timeoutMs: Math.min(timeoutMs, 8000),
+      toolEvent: {
+        tool_name: asString(toolEvent.tool_name) || `job:${jobID}`,
+        tool_arguments: toolArguments,
+        request_context:
+          toolEvent.request_context && typeof toolEvent.request_context === "object"
+            ? toolEvent.request_context
+            : undefined,
+        transport: asString(toolEvent.transport) || "opencode_local_job_poll",
+      },
     })
     const job = payload?.job && typeof payload.job === "object" ? payload.job : {}
     const state = asString(job.state || payload?.task?.status)
@@ -1371,6 +1740,27 @@ async function waitForAgentJob(jobID, options = {}) {
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
   }
 
+  await bestEffortSubmitToolEvent({
+    event_stage: "plugin_timeout",
+    transport: asString(toolEvent.transport) || "opencode_local_job_poll",
+    tool_name: asString(toolEvent.tool_name) || `job:${jobID}`,
+    tool_arguments: toolArguments,
+    request_context:
+      toolEvent.request_context && typeof toolEvent.request_context === "object"
+        ? toolEvent.request_context
+        : undefined,
+    duration_ms: Date.now() - startedAt,
+    ok: false,
+    retryable: true,
+    error_code: "job_timeout",
+    error_message: `timed out waiting for agent job ${jobID}`,
+    metadata: {
+      job_id: jobID,
+      timeout_ms: timeoutMs,
+      poll_interval_ms: pollIntervalMs,
+      source_client: "opencode_plugin",
+    },
+  })
   throw new Error(`timed out waiting for agent job ${jobID}`)
 }
 
@@ -1410,6 +1800,7 @@ function summarizeRP2350JobPayload(payload) {
 }
 
 async function runRP2350Job(action, args = {}, options = {}) {
+  const requestContext = defaultClientContext()
   const requestedBoard = normalizeBoardID(args.board_id || args.board) || "RP2350"
   const requestedVariant = normalizeVariantID(requestedBoard, args.variant_id || args.variant)
     || (requestedBoard === "RP2350" ? "" : requestedBoard)
@@ -1433,6 +1824,7 @@ async function runRP2350Job(action, args = {}, options = {}) {
     action,
     board_id: effectiveBoard,
     variant_id: effectiveVariant,
+    request_context: requestContext,
   }
   if (target.device_id) payload.device_id = target.device_id
 
@@ -1451,20 +1843,306 @@ async function runRP2350Job(action, args = {}, options = {}) {
     if (Number.isFinite(parsed) && parsed > 0) payload.lines = Math.floor(parsed)
   }
 
+  const toolName = `dbt_rp2350_${action}`
   const createResult = await localAgentJSON("/v1/jobs/rp2350", {
     method: "POST",
     payload,
     timeoutMs: options.createTimeoutMs || 10000,
+    toolEvent: {
+      tool_name: toolName,
+      tool_arguments: payload,
+      request_context: requestContext,
+      transport: "opencode_rp2350_job_create",
+    },
   })
   const jobID = asString(createResult?.job?.job_id || createResult?.task?.id)
   if (!jobID) {
+    await bestEffortSubmitToolEvent({
+      event_stage: "plugin_response",
+      transport: "opencode_rp2350_job_create",
+      tool_name: toolName,
+      tool_arguments: payload,
+      request_context: requestContext,
+      ok: false,
+      retryable: false,
+      error_code: "job_id_missing",
+      error_message: `rp2350 ${action} did not return a job id`,
+      summary_for_user: asString(createResult?.summary_for_user || createResult?.summary || ""),
+      metadata: {
+        source_client: "opencode_plugin",
+      },
+    })
     throw new Error(`rp2350 ${action} did not return a job id`)
   }
   const finalPayload = await waitForAgentJob(jobID, {
     timeoutMs: options.timeoutMs || 90000,
     pollIntervalMs: options.pollIntervalMs || 500,
+    toolEvent: {
+      tool_name: toolName,
+      tool_arguments: payload,
+      request_context: requestContext,
+      transport: "opencode_rp2350_job_poll",
+    },
   })
   return summarizeRP2350JobPayload(finalPayload)
+}
+
+function summarizeFlashImageJobPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload
+  const job = payload.job && typeof payload.job === "object" ? payload.job : {}
+  const request = job.request && typeof job.request === "object" ? job.request : {}
+  const result = job.result && typeof job.result === "object" ? job.result : {}
+  const ok = job.ok === true || result.ok === true
+  const progress = normalizeJobProgress(result.progress ?? job.progress ?? payload.progress)
+  const summary = asString(
+    result.summary_for_user ||
+      job.output_tail ||
+      job.failure_summary ||
+      result.output ||
+      result.error ||
+      payload.summary_for_user
+  )
+
+  return {
+    ok,
+    job_id: asString(job.job_id),
+    action: "flash_image",
+    board_id: asString(result.board_id || request.board_id),
+    variant_id: asString(result.variant_id || request.variant_id),
+    device_id: asString(result.device_id || request.device_id),
+    state: asString(result.state || job.state),
+    status_label: asString(job.status_label),
+    progress,
+    progress_percent: typeof progress === "number" ? Math.round(progress * 100) : undefined,
+    progress_stage: asString(result.progress_stage || job.progress_stage),
+    progress_text: asString(result.progress_text || job.progress_text),
+    summary_for_user: summary,
+    image_source: asString(result.image_source || request.image_source),
+    scope: asString(result.scope || request.scope),
+    host_image_dir: asString(result.host_image_dir || request.host_image_dir),
+    mode: asString(result.mode || request.mode),
+    dry_run: result.dry_run === true || request.dry_run === true,
+    returncode: Number.isFinite(job.returncode) ? job.returncode : undefined,
+    stdout_excerpt: excerptText(result.stdout || job.output_tail || ""),
+    stderr_excerpt: excerptText(result.stderr || job.failure_summary || ""),
+  }
+}
+
+function normalizeJobProgress(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return undefined
+  if (parsed > 1) return Math.max(0, Math.min(1, parsed / 100))
+  return Math.max(0, Math.min(1, parsed))
+}
+
+function summarizeAgentJobStatusPayload(payload, options = {}) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload
+  const job = payload.job && typeof payload.job === "object" ? payload.job : {}
+  const request = job.request && typeof job.request === "object" ? job.request : {}
+  const result = job.result && typeof job.result === "object" ? job.result : {}
+  const requestPayload =
+    options.requestPayload && typeof options.requestPayload === "object" && !Array.isArray(options.requestPayload)
+      ? options.requestPayload
+      : {}
+  const state = asString(result.state || job.state || payload?.task?.status)
+  const terminal = ["finished", "failed", "error", "cancelled"].includes(state)
+  const failed = ["failed", "error", "cancelled"].includes(state)
+  const progress = normalizeJobProgress(result.progress ?? job.progress ?? payload.progress)
+  const outputTail = asString(result.output_tail || job.output_tail || payload.output_tail)
+  const failureSummary = asString(result.failure_summary || job.failure_summary || payload.failure_summary)
+  const summary = asString(
+    result.summary_for_user ||
+      job.summary_for_user ||
+      outputTail ||
+      failureSummary ||
+      result.output ||
+      result.error ||
+      payload.summary_for_user ||
+      payload.summary
+  )
+
+  return {
+    ok: failed ? false : payload.ok !== false,
+    job_id: asString(job.job_id || payload?.task?.id || options.jobID),
+    action: asString(options.action || result.action || request.action || job.action),
+    state,
+    terminal,
+    status_label: asString(job.status_label || result.status_label),
+    progress,
+    progress_percent: typeof progress === "number" ? Math.round(progress * 100) : undefined,
+    progress_stage: asString(result.progress_stage || job.progress_stage),
+    progress_text: asString(result.progress_text || job.progress_text),
+    summary_for_user: summary,
+    output_tail: excerptText(outputTail),
+    failure_summary: excerptText(failureSummary),
+    required_runtime_action: asString(job.required_runtime_action || result.required_runtime_action),
+    board_id: asString(result.board_id || request.board_id || requestPayload.board_id),
+    variant_id: asString(result.variant_id || request.variant_id || requestPayload.variant_id),
+    device_id: asString(result.device_id || request.device_id || requestPayload.device_id),
+    image_source: asString(result.image_source || request.image_source || requestPayload.image_source),
+    scope: asString(result.scope || request.scope || requestPayload.scope),
+    dry_run: result.dry_run === true || request.dry_run === true || requestPayload.dry_run === true,
+    returncode: Number.isFinite(job.returncode) ? job.returncode : undefined,
+    poll_hint: terminal
+      ? ""
+      : "This is a non-blocking agent job. Query dbtjobstatus with this job_id to show current progress.",
+  }
+}
+
+async function createFlashImageJob(args = {}, options = {}) {
+  const requestContext = defaultClientContext()
+  const requestedBoard = normalizeBoardID(args.board_id || args.board) || ""
+  const requestedVariant = normalizeVariantID(requestedBoard, args.variant_id || args.variant)
+  let sanitizedDeviceID = ""
+  try {
+    const status = await getStatusWithAutoRepair()
+    sanitizedDeviceID = sanitizeExplicitDeviceID(status, args.device_id, requestedBoard, requestedVariant)
+  } catch {
+    sanitizedDeviceID = ""
+  }
+  const target = await resolveConnectedMutationTarget(
+    requestedBoard,
+    requestedVariant,
+    sanitizedDeviceID || args.device_id,
+  )
+  const payload = {
+    action: "flash_image",
+    board_id: target.board || requestedBoard,
+    variant_id: target.variant || requestedVariant,
+    device_id: target.device_id,
+    image_source: asString(args.image_source) || "factory",
+    scope: asString(args.scope) || "all",
+    request_context: requestContext,
+    dry_run: boolValue(args.dry_run),
+  }
+  const hostImageDir = resolveWorkspacePath(args.host_image_dir)
+  if (hostImageDir) payload.host_image_dir = hostImageDir
+  const mode = asString(args.mode)
+  if (mode) payload.mode = mode
+
+  const createResult = await localAgentJSON("/v1/jobs/flash", {
+    method: "POST",
+    payload,
+    timeoutMs: options.createTimeoutMs || 12000,
+    toolEvent: {
+      tool_name: asString(options.toolName) || "dbt_flash_image",
+      tool_arguments: payload,
+      request_context: requestContext,
+      transport: asString(options.transport) || "opencode_flash_job_create",
+    },
+  })
+  const jobID = asString(createResult?.job?.job_id || createResult?.task?.id)
+  if (!jobID) {
+    await bestEffortSubmitToolEvent({
+      event_stage: "plugin_response",
+      transport: "opencode_flash_job_create",
+      tool_name: "dbt_flash_image",
+      tool_arguments: payload,
+      request_context: requestContext,
+      ok: false,
+      retryable: false,
+      error_code: "job_id_missing",
+      error_message: "flash image job did not return a job id",
+      summary_for_user: asString(createResult?.summary_for_user || createResult?.summary || ""),
+      metadata: {
+        source_client: "opencode_plugin",
+      },
+    })
+    throw new Error("flash image job did not return a job id")
+  }
+  return { createResult, jobID, payload, requestContext }
+}
+
+async function startFlashImageJob(args = {}, options = {}) {
+  try {
+    const created = await createFlashImageJob(args, {
+      ...options,
+      toolName: asString(options.toolName) || "dbt_start_flash_image",
+      transport: asString(options.transport) || "opencode_flash_job_start",
+    })
+    return summarizeAgentJobStatusPayload(created.createResult, {
+      action: "flash_image",
+      jobID: created.jobID,
+      requestPayload: created.payload,
+    })
+  } catch (error) {
+    const message = asString(error?.message || String(error || ""))
+    const noBoard = message.toLowerCase().includes("no connected development board")
+    const classified = classifyToolError(error)
+    return {
+      ok: false,
+      action: "flash_image",
+      state: "not_started",
+      terminal: true,
+      error_code: noBoard ? "no_connected_board" : classified.code,
+      error_message: excerptText(message),
+      summary_for_user: noBoard
+        ? "没有检测到已连接的开发板，无法启动烧写任务。请连接开发板后重试。"
+        : `启动烧写任务失败：${excerptText(message, 240)}`,
+      retryable: true,
+    }
+  }
+}
+
+async function runFlashImageJob(args = {}, options = {}) {
+  const created = await createFlashImageJob(args, options)
+  const finalPayload = await waitForAgentJob(created.jobID, {
+    timeoutMs: options.timeoutMs || (created.payload.dry_run ? 60000 : 900000),
+    pollIntervalMs: options.pollIntervalMs || 750,
+    toolEvent: {
+      tool_name: "dbt_flash_image",
+      tool_arguments: created.payload,
+      request_context: created.requestContext,
+      transport: "opencode_flash_job_poll",
+    },
+  })
+  return summarizeFlashImageJobPayload(finalPayload)
+}
+
+async function getAgentJobStatus(jobID, options = {}) {
+  const requestContext = defaultClientContext()
+  const id = asString(jobID || options.jobID)
+  if (!id) {
+    return {
+      ok: false,
+      error_code: "job_id_required",
+      error_message: "job_id is required",
+      summary_for_user: "需要提供 job_id 才能查询烧写或其他长任务进度。",
+    }
+  }
+  try {
+    const payload = await localAgentJSON(`/v1/jobs/${encodeURIComponent(id)}`, {
+      timeoutMs: options.timeoutMs || 8000,
+      toolEvent: {
+        tool_name: asString(options.toolName) || "dbt_get_job_status",
+        tool_arguments: { job_id: id },
+        request_context: requestContext,
+        transport: asString(options.transport) || "opencode_job_status",
+      },
+    })
+    return summarizeAgentJobStatusPayload(payload, {
+      action: asString(options.action) || "job_status",
+      jobID: id,
+    })
+  } catch (error) {
+    const message = asString(error?.message || String(error || ""))
+    const notFound = message.includes("HTTP 404") || message.toLowerCase().includes("job not found")
+    const classified = classifyToolError(error)
+    return {
+      ok: false,
+      job_id: id,
+      action: asString(options.action) || "job_status",
+      state: notFound ? "not_found" : "error",
+      terminal: true,
+      progress: undefined,
+      progress_percent: undefined,
+      error_code: notFound ? "job_not_found" : classified.code,
+      error_message: excerptText(message),
+      summary_for_user: notFound
+        ? `未找到本地任务 ${id}。请确认 job_id 来自同一个 dbt-agentd 会话，或重新启动烧写任务。`
+        : `查询本地任务 ${id} 状态失败：${excerptText(message, 240)}`,
+    }
+  }
 }
 
 function reviewSourceFile(language, source, capability, binaryName) {
@@ -1486,6 +2164,222 @@ function advancedToolsEnabled() {
     .trim()
     .toLowerCase()
   return value === "1" || value === "true" || value === "yes"
+}
+
+function configuredBoardForToolSurface() {
+  const runtime = readRuntimeConfig()
+  return normalizeBoardID(
+    process.env.DBT_OPENCODE_BOARD ||
+      process.env.OPENCODE_DBT_BOARD ||
+      runtime.defaultBoardID ||
+      runtime.boardID ||
+      ""
+  )
+}
+
+function configuredOpenCodeToolset() {
+  return String(
+    process.env.DBT_OPENCODE_TOOLSET ||
+      process.env.OPENCODE_DBT_TOOLSET ||
+      ""
+  ).trim().toLowerCase()
+}
+
+function guidanceDisabled() {
+  return boolValue(process.env.DBT_OPENCODE_DISABLE_GUIDANCE) ||
+    boolValue(process.env.OPENCODE_DBT_DISABLE_GUIDANCE)
+}
+
+function parseDispatchArguments(raw) {
+  const payload = {}
+  const text = asString(raw?.arguments_json)
+  if (text) {
+    try {
+      const parsed = JSON.parse(text)
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {
+          ok: false,
+          error_code: "invalid_arguments_json",
+          error_message: "arguments_json must decode to a JSON object",
+        }
+      }
+      Object.assign(payload, parsed)
+    } catch (error) {
+      return {
+        ok: false,
+        error_code: "invalid_arguments_json",
+        error_message: asString(error?.message || String(error || "")),
+      }
+    }
+  }
+  const request = asString(raw?.request)
+  if (request && !payload.request) payload.request = request
+  return payload
+}
+
+function normalizeDispatchAction(value) {
+  const key = asString(value).toLowerCase().replace(/[\s_]+/g, "-")
+  const aliases = new Map([
+    ["status", "status"],
+    ["current-status", "status"],
+    ["current-board-status", "status"],
+    ["devices", "list-devices"],
+    ["list-devices", "list-devices"],
+    ["connected-devices", "list-devices"],
+    ["flash", "flash-image"],
+    ["flash-image", "flash-image"],
+    ["flash-start", "flash-start"],
+    ["start-flash", "flash-start"],
+    ["start-flash-image", "flash-start"],
+    ["flash-image-start", "flash-start"],
+    ["init-image", "flash-image"],
+    ["initial-image", "flash-image"],
+    ["factory-flash", "flash-image"],
+    ["job-status", "job-status"],
+    ["status-job", "job-status"],
+    ["flash-status", "job-status"],
+    ["progress", "job-status"],
+    ["prepare", "prepare"],
+    ["resolve", "prepare"],
+    ["capabilities", "capabilities"],
+    ["board-capabilities", "capabilities"],
+    ["capability-summaries", "capability-summaries"],
+    ["capability-context", "capability-context"],
+    ["board-config", "board-config"],
+    ["config", "board-config"],
+    ["env-check", "env-check"],
+    ["environment-check", "env-check"],
+    ["env-install", "env-install"],
+    ["environment-install", "env-install"],
+    ["usbnet", "usbnet"],
+    ["ensure-usbnet", "usbnet"],
+    ["logo", "update-logo"],
+    ["update-logo", "update-logo"],
+    ["chip-probe", "chip-probe"],
+    ["probe-chip", "chip-probe"],
+    ["cpu-frequency", "cpu-frequency"],
+    ["ddr-frequency", "ddr-frequency"],
+    ["cpu-temperature", "cpu-temperature"],
+    ["temperature", "cpu-temperature"],
+    ["processes", "processes"],
+    ["process", "processes"],
+    ["list-processes", "processes"],
+    ["board-processes", "processes"],
+    ["ps", "processes"],
+    ["wireless-probe", "wireless-probe"],
+    ["wifi-bluetooth-probe", "wireless-probe"],
+    ["connect-wifi", "connect-wifi"],
+    ["scan-wifi", "scan-wifi"],
+    ["wifi-scan", "scan-wifi"],
+    ["scan-bluetooth", "scan-bluetooth"],
+    ["bluetooth-scan", "scan-bluetooth"],
+    ["build-run", "build-run"],
+    ["run-program", "build-run"],
+    ["check-plugin-update", "check-plugin-update"],
+    ["update-plugin", "update-plugin"],
+    ["rp2350-detect", "rp2350-detect"],
+    ["rp2350-flash", "rp2350-flash"],
+    ["rp2350-verify", "rp2350-verify"],
+    ["rp2350-run", "rp2350-run"],
+    ["rp2350-logs", "rp2350-logs"],
+    ["rp2350-tail-logs", "rp2350-logs"],
+    ["rp2350-build-flash", "rp2350-build-flash"],
+  ])
+  return aliases.get(key) || key
+}
+
+function dispatchTargetToolName(action) {
+  const map = new Map([
+    ["status", "dbt_current_board_status"],
+    ["list-devices", "dbt_list_connected_devices"],
+    ["flash-image", "dbt_flash_image"],
+    ["flash-start", "dbt_start_flash_image"],
+    ["job-status", "dbt_get_job_status"],
+    ["prepare", "dbt_prepare_request"],
+    ["capabilities", "dbt_get_board_capabilities"],
+    ["capability-summaries", "dbt_list_capability_summaries"],
+    ["capability-context", "dbt_get_capability_context"],
+    ["board-config", "dbt_get_board_config"],
+    ["env-check", "dbt_check_board_environment"],
+    ["env-install", "dbt_install_board_environment"],
+    ["usbnet", "dbt_ensure_usbnet"],
+    ["update-logo", "dbt_update_logo"],
+    ["chip-probe", "dbt_probe_chip_control"],
+    ["cpu-frequency", "dbt_get_cpu_frequency"],
+    ["ddr-frequency", "dbt_get_ddr_frequency"],
+    ["cpu-temperature", "dbt_get_cpu_temperature"],
+    ["processes", "dbt_list_board_processes"],
+    ["wireless-probe", "dbt_probe_wifi_bluetooth"],
+    ["connect-wifi", "dbt_connect_wifi"],
+    ["scan-wifi", "dbt_scan_wifi_networks"],
+    ["scan-bluetooth", "dbt_scan_bluetooth_devices"],
+    ["build-run", "dbt_build_run_program"],
+    ["check-plugin-update", "dbt_check_plugin_update"],
+    ["update-plugin", "dbt_update_plugin"],
+    ["rp2350-detect", "dbt_rp2350_detect"],
+    ["rp2350-flash", "dbt_rp2350_flash"],
+    ["rp2350-verify", "dbt_rp2350_verify"],
+    ["rp2350-run", "dbt_rp2350_run"],
+    ["rp2350-logs", "dbt_rp2350_tail_logs"],
+    ["rp2350-build-flash", "dbt_rp2350_build_flash_source"],
+  ])
+  return map.get(action) || ""
+}
+
+function geminiAliasToolNames() {
+  return new Set([
+    "dbtstatus",
+    "dbtlistdevices",
+    "dbtflashimage",
+    "dbtflashstart",
+    "dbtjobstatus",
+    "dbtprepare",
+    "dbtcapabilities",
+    "dbtcapabilitysummaries",
+    "dbtcapabilitycontext",
+    "dbtboardconfig",
+    "dbtenvcheck",
+    "dbtenvinstall",
+    "dbtusbnet",
+    "dbtupdatelogo",
+    "dbtchipprobe",
+    "dbtcpufrequency",
+    "dbtddrfrequency",
+    "dbtcputemperature",
+    "dbtprocesses",
+    "dbtwirelessprobe",
+    "dbtconnectwifi",
+    "dbtwifiscan",
+    "dbtbluetoothscan",
+    "dbtbuildrun",
+    "dbtcheckpluginupdate",
+    "dbtupdateplugin",
+  ])
+}
+
+function defaultOpenCodeToolNames(connectedBoard) {
+  const configuredToolset = configuredOpenCodeToolset()
+  if (configuredToolset === "none") {
+    return new Set()
+  }
+  if (configuredToolset === "alias") {
+    return geminiAliasToolNames()
+  }
+  if (configuredToolset === "dispatch") {
+    return new Set(["dbttool"])
+  }
+  if (configuredToolset === "status") {
+    return new Set(["dbt_current_board_status"])
+  }
+  if (configuredToolset === "smoke") {
+    return new Set([
+      "dbt_current_board_status",
+      "dbt_flash_image",
+      "dbt_check_plugin_update",
+    ])
+  }
+
+  return geminiAliasToolNames()
 }
 
 function sanitizeStatusPayload(payload) {
@@ -1795,15 +2689,42 @@ async function getStatusWithAutoRepair() {
   }
 }
 
-async function getPluginStatus() {
+async function getCachedStatusSummary() {
+  const cached = await tryLocalAgentJSON("/v1/status/summary", { timeoutMs: 2500 })
+  if (cached && typeof cached === "object" && !Array.isArray(cached)) {
+    return sanitizeStatusPayload(cached)
+  }
   return getStatusWithAutoRepair()
+}
+
+function shouldForceLiveStatus(reason) {
+  const text = asString(reason).toLowerCase()
+  if (!text) return false
+  return [
+    "live",
+    "fresh",
+    "refresh",
+    "recheck",
+    "实时",
+    "刷新",
+    "重新检测",
+    "重新探测",
+    "最新状态",
+  ].some((keyword) => text.includes(keyword))
+}
+
+async function getPluginStatus(options = {}) {
+  if (options.live === true) {
+    return getStatusWithAutoRepair()
+  }
+  return getCachedStatusSummary()
 }
 
 async function resolveConnectedBoard(explicitBoard, explicitVariant) {
   const { board, variant } = normalizeBoardVariantInput(explicitBoard, explicitVariant)
   if (board && variant) return { board, variant }
 
-  const status = await getStatusWithAutoRepair()
+  const status = await getPluginStatus()
   const runtimeStatus = status && typeof status === "object" && status.runtime_status && typeof status.runtime_status === "object"
     ? status.runtime_status
     : {}
@@ -1859,7 +2780,7 @@ async function resolveBoardVariantIfConnected(explicitBoard, explicitVariant) {
   if (variant) return { board, variant }
 
   try {
-    const status = await getStatusWithAutoRepair()
+    const status = await getPluginStatus()
     const device = status && typeof status === "object" ? status.device : null
     if (device && typeof device === "object" && device.connected === true) {
       const connectedBoard = asString(device.board_id)
@@ -2058,9 +2979,9 @@ async function appendUpdateNoticeIfNeeded(payload, toolkitRoot) {
 }
 
 export const pluginInfo = {
-  name: "Development Board Toolchain",
-  displayName: "Development Board Toolchain",
-  description: "Universal development board control, capability planning, flashing, and environment tooling for OpenCode.",
+  name: "DBT-Agent",
+  displayName: "DBT-Agent",
+  description: "development-board-toolchain board control, capability planning, flashing, and environment tooling for OpenCode.",
 }
 
 async function performPluginUpdate(options = {}) {
@@ -2071,62 +2992,72 @@ async function performPluginUpdate(options = {}) {
   const repositorySource = resolveUpdateRepository()
   const force = options.force === true || String(options.force || "").trim().toLowerCase() === "true"
 
+  if (manifestSource) assertUpdateSourceAllowed(manifestSource, "update manifest")
+  if (repositorySource) assertUpdateSourceAllowed(repositorySource, "update repository")
+
   const tempRoot = mkdtempSync(path.join(tmpdir(), "dbt-opencode-update-"))
   const cloneDir = path.join(tempRoot, "repo")
   try {
     const manifest = manifestSource
       ? await requestJSON(manifestSource).catch(() => null)
       : null
+    const manifestRepositorySource =
+      manifest && typeof manifest === "object" && !Array.isArray(manifest)
+        ? resolveManifestReference(
+            manifestSource,
+            manifest.repository_url || manifest.update_repository || manifest.repository || ""
+          )
+        : ""
     if (manifest && typeof manifest === "object" && !Array.isArray(manifest)) {
       const installerSource = resolveManifestReference(
         manifestSource,
         manifest.installer_url || manifest.installer_path || ""
       )
-      if (!installerSource) {
-        throw new Error(`installer_url is missing in update manifest: ${manifestSource}`)
-      }
-      const installerPath = path.join(tempRoot, "install-opencode-plugin.sh")
-      await materializeTextResource(installerSource, installerPath)
-      const args = [installerPath, "--install-dir", installRoot, "--with-opencode"]
-      if (force) args.push("--force")
-      args.push("--manifest-url", manifestSource)
-      const { stdout, stderr } = await execFileAsync("/bin/bash", args, {
-        cwd: tempRoot,
-        maxBuffer: 64 * 1024 * 1024,
-        env: {
-          ...process.env,
-          DBT_TOOLKIT_ROOT: installRoot,
-          DBT_OPENCODE_RELEASE_MANIFEST_URL: manifestSource,
-        },
-      })
+      if (installerSource) {
+        const installerPath = path.join(tempRoot, "install-opencode-plugin.sh")
+        await materializeTextResource(installerSource, installerPath)
+        const args = [installerPath, "--install-dir", installRoot, "--with-opencode"]
+        if (force) args.push("--force")
+        args.push("--manifest-url", manifestSource)
+        const { stdout, stderr } = await execFileAsync("/bin/bash", args, {
+          cwd: tempRoot,
+          maxBuffer: 64 * 1024 * 1024,
+          env: {
+            ...process.env,
+            DBT_TOOLKIT_ROOT: installRoot,
+            DBT_OPENCODE_RELEASE_MANIFEST_URL: manifestSource,
+          },
+        })
 
-      const localVersion = readLocalToolkitVersion(installRoot)
-      const remoteVersion = asString(manifest.version) || localVersion
-      writeUpdateState({
-        checking: false,
-        last_checked_at: isoNow(),
-        local_version: localVersion,
-        remote_version: remoteVersion,
-        update_available: false,
-        message: `Development Board Toolchain updated to ${localVersion}`,
-        toolkit_root: installRoot,
-        update_manifest_url: manifestSource,
-      })
+        const localVersion = readLocalUpdateVersion(installRoot)
+        const remoteVersion = asString(manifest.version) || localVersion
+        writeUpdateState({
+          checking: false,
+          last_checked_at: isoNow(),
+          local_version: localVersion,
+          remote_version: remoteVersion,
+          update_available: false,
+          message: `Development Board Toolchain updated to ${localVersion}`,
+          toolkit_root: installRoot,
+          update_manifest_url: manifestSource,
+        })
 
-      return {
-        ok: true,
-        install_root: installRoot,
-        toolkit_root: installRoot,
-        update_manifest_url: manifestSource,
-        version: localVersion,
-        stdout: String(stdout || "").trim(),
-        stderr: String(stderr || "").trim(),
+        return {
+          ok: true,
+          install_root: installRoot,
+          toolkit_root: installRoot,
+          update_manifest_url: manifestSource,
+          version: localVersion,
+          stdout: String(stdout || "").trim(),
+          stderr: String(stderr || "").trim(),
+        }
       }
     }
 
     const fallbackSource = explicitSource
-      ? (isLikelyRepositorySource(explicitSource) ? explicitSource : repositorySource)
-      : repositorySource
+      ? (isLikelyRepositorySource(explicitSource) ? explicitSource : (manifestRepositorySource || repositorySource))
+      : (manifestRepositorySource || repositorySource)
+    if (fallbackSource) assertUpdateSourceAllowed(fallbackSource, "update repository")
     if (!fallbackSource) {
       throw new Error(
         manifestSource
@@ -2136,7 +3067,7 @@ async function performPluginUpdate(options = {}) {
     }
 
     let sourceRoot = cloneDir
-    if (existsSync(fallbackSource)) {
+    if (localUpdateSourcesAllowed() && existsSync(fallbackSource)) {
       sourceRoot = path.resolve(fallbackSource)
     } else {
       await execFileAsync("git", ["clone", "--depth", "1", fallbackSource, cloneDir], {
@@ -2153,6 +3084,8 @@ async function performPluginUpdate(options = {}) {
       : []
     const candidateInstallers = [
       path.join(sourceRoot, "install.sh"),
+      path.join(sourceRoot, "release", "install-opencode.sh"),
+      path.join(sourceRoot, "opencode_plugin", "release", "install.sh"),
       path.join(sourceRoot, "product_release", "runtime", "install.sh"),
       ...runtimeBundleDir,
       path.join(sourceRoot, "public_release", "install.sh"),
@@ -2160,7 +3093,7 @@ async function performPluginUpdate(options = {}) {
     ]
     const installScript = candidateInstallers.find((item) => existsSync(item))
     if (!installScript) {
-      throw new Error(`install.sh not found in update source: ${source}`)
+      throw new Error(`install.sh not found in update source: ${fallbackSource}`)
     }
 
     const args = [installScript, "--install-dir", installRoot, "--with-opencode"]
@@ -2194,7 +3127,7 @@ async function performPluginUpdate(options = {}) {
       throw error
     }
 
-    const localVersion = readLocalToolkitVersion(installRoot)
+    const localVersion = readLocalUpdateVersion(installRoot)
     writeUpdateState({
       checking: false,
       last_checked_at: isoNow(),
@@ -2221,8 +3154,9 @@ async function performPluginUpdate(options = {}) {
 }
 
 export const DevelopmentBoardToolchainPlugin = async () => {
-  const executeStatusTool = async () => {
-    const payload = compactStatusPayload(await getPluginStatus())
+  const connectedBoardForToolSurface = configuredBoardForToolSurface()
+  const executeStatusTool = async (reason) => {
+    const payload = compactStatusPayload(await getPluginStatus({ live: shouldForceLiveStatus(reason) }))
     try {
       const root = resolveToolkitRoot()
       return jsonText(await appendUpdateNoticeIfNeeded(payload, root))
@@ -2234,16 +3168,59 @@ export const DevelopmentBoardToolchainPlugin = async () => {
   const tools = {
       dbt_current_board_status: tool({
         description: "Use immediately for current board status, connection state, USB ECM, SSH, control service, or whether a board is connected. This is the canonical DBT status tool. If no board is connected and the user did not name a board model, do not guess anything else.",
-        args: {},
-        async execute() {
-          return executeStatusTool()
+        args: {
+          reason: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          return executeStatusTool(args.reason)
+        },
+      }),
+      dbtstatus: tool({
+        description: "Get current development board status through local dbt-agentd.",
+        args: {
+          request: tool.schema.string(),
+        },
+        async execute(args) {
+          return executeStatusTool(args.request)
         },
       }),
       dbt_list_connected_devices: tool({
         description: "List all currently connected development boards with device_id, board, variant, transport, and which one is the active device. Use this when multiple boards are connected or when the user needs to choose a specific device.",
         args: {},
         async execute() {
-          return jsonText(summarizeConnectedDevicesPayload(await getStatusWithAutoRepair()))
+          return jsonText(summarizeConnectedDevicesPayload(await getPluginStatus()))
+        },
+      }),
+      dbt_list_board_processes: tool({
+        description: "List current Linux-board processes from the connected development board through local dbt-agentd. Use this for requests such as '当前开发板有哪些进程' or '列出板端正在运行的进程'. This is for Linux boards like TaishanPi, not RP2350-family microcontrollers.",
+        args: {
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          name_filter: tool.schema.string().optional(),
+          limit: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const normalized = normalizeBoardVariantInput(args.board, args.variant)
+          const requestedLimit = Number.parseInt(asString(args.limit), 10)
+          let sanitizedDeviceID = ""
+          try {
+            const status = await getPluginStatus()
+            sanitizedDeviceID = sanitizeExplicitDeviceID(status, args.device_id, normalized.board, normalized.variant)
+          } catch {}
+          const target = await resolveConnectedMutationTarget(
+            normalized.board,
+            normalized.variant,
+            sanitizedDeviceID,
+          )
+          const payload = await localAgentTool("list_board_processes", {
+            board_id: target.board || normalized.board,
+            variant_id: target.variant || normalized.variant,
+            device_id: target.device_id,
+            name_filter: asString(args.name_filter),
+            limit: Number.isFinite(requestedLimit) ? requestedLimit : undefined,
+          }, { timeoutMs: 20000 })
+          return jsonText(payload)
         },
       }),
       dbt_rp2350_detect: tool({
@@ -2399,7 +3376,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           const normalized = normalizeBoardVariantInput(args.board, args.variant)
           let sanitizedDeviceID = ""
           try {
-            const status = await getStatusWithAutoRepair()
+            const status = await getPluginStatus()
             sanitizedDeviceID = sanitizeExplicitDeviceID(status, args.device_id, normalized.board, normalized.variant)
           } catch {
             sanitizedDeviceID = ""
@@ -2571,6 +3548,49 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             variant_id: target.variant,
             device_id: target.device_id,
           }, { timeoutMs: 12000 }))
+        },
+      }),
+      dbt_flash_image: tool({
+        description: "Flash the current board with an installed factory or custom image through local dbt-agentd. Use this for TaishanPi initialization image flashing; it handles running/download-mode detection and delegates the actual flashing workflow to the installed runtime. Do not inspect dbtctl help or run shell flashing commands.",
+        args: {
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          image_source: tool.schema.string().optional(),
+          scope: tool.schema.string().optional(),
+          host_image_dir: tool.schema.string().optional(),
+          mode: tool.schema.string().optional(),
+          dry_run: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          return jsonText(await runFlashImageJob(args, {
+            timeoutMs: boolValue(args.dry_run) ? 60000 : 900000,
+          }))
+        },
+      }),
+      dbt_start_flash_image: tool({
+        description: "Start an installed factory or custom image flashing job through local dbt-agentd and return immediately with job_id and initial progress. Use this for long real flashing operations so progress can be queried with dbt_get_job_status.",
+        args: {
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          image_source: tool.schema.string().optional(),
+          scope: tool.schema.string().optional(),
+          host_image_dir: tool.schema.string().optional(),
+          mode: tool.schema.string().optional(),
+          dry_run: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          return jsonText(await startFlashImageJob(args))
+        },
+      }),
+      dbt_get_job_status: tool({
+        description: "Query a local dbt-agentd long-running job by job_id. Use after dbt_start_flash_image to show current flashing progress, output_tail, terminal state, and failure summary.",
+        args: {
+          job_id: tool.schema.string(),
+        },
+        async execute(args) {
+          return jsonText(await getAgentJobStatus(args.job_id))
         },
       }),
       dbt_update_logo: tool({
@@ -3000,6 +4020,115 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       }),
   }
 
+  const dispatchTools = { ...tools }
+  tools.dbttool = tool({
+    description: "Gemini-safe DBT tool dispatcher. Use this for all Development Board Toolchain operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, build-run, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. Put tool-specific arguments as a JSON object string in arguments_json.",
+    args: {
+      action: tool.schema.string(),
+      request: tool.schema.string().optional(),
+      arguments_json: tool.schema.string().optional(),
+    },
+    async execute(args) {
+      const action = normalizeDispatchAction(args.action)
+      const targetToolName = dispatchTargetToolName(action)
+      const selected = targetToolName ? dispatchTools[targetToolName] : null
+      if (!selected || typeof selected.execute !== "function") {
+        return jsonText({
+          ok: false,
+          error_code: "unsupported_dispatch_action",
+          error_message: `Unsupported DBT action: ${asString(args.action)}`,
+          supported_actions: [
+            "status",
+            "list-devices",
+            "flash-image",
+            "flash-start",
+            "job-status",
+            "prepare",
+            "capabilities",
+            "capability-summaries",
+            "capability-context",
+            "board-config",
+            "env-check",
+            "env-install",
+            "usbnet",
+            "update-logo",
+            "chip-probe",
+            "cpu-frequency",
+            "ddr-frequency",
+            "cpu-temperature",
+            "processes",
+            "wireless-probe",
+            "connect-wifi",
+            "scan-wifi",
+            "scan-bluetooth",
+            "build-run",
+            "check-plugin-update",
+            "update-plugin",
+            "rp2350-detect",
+            "rp2350-flash",
+            "rp2350-verify",
+            "rp2350-run",
+            "rp2350-logs",
+            "rp2350-build-flash",
+          ],
+        })
+      }
+      const dispatchArgs = parseDispatchArguments(args)
+      if (dispatchArgs.ok === false) return jsonText(dispatchArgs)
+      return selected.execute(dispatchArgs)
+    },
+  })
+
+  const aliasSpecs = [
+    ["dbtlistdevices", "dbt_list_connected_devices", "List connected DBT development boards."],
+    ["dbtflashimage", "dbt_flash_image", "Flash a factory or custom image through local dbt-agentd. For TaishanPi initialization, use arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}; add \"dry_run\":\"true\" only for validation without real flashing."],
+    ["dbtflashstart", "dbt_start_flash_image", "Start a long factory or custom image flashing job and return job_id immediately for progress polling."],
+    ["dbtjobstatus", "dbt_get_job_status", "Query a local dbt-agentd job by job_id and show progress, output tail, terminal state, or failure summary."],
+    ["dbtprepare", "dbt_prepare_request", "Resolve a DBT board request before capability or execution planning."],
+    ["dbtcapabilities", "dbt_get_board_capabilities", "Get capability summaries for the current or requested board."],
+    ["dbtcapabilitysummaries", "dbt_list_capability_summaries", "List concise capability summaries for a board and variant."],
+    ["dbtcapabilitycontext", "dbt_get_capability_context", "Get detailed capability implementation context."],
+    ["dbtboardconfig", "dbt_get_board_config", "Get board and runtime configuration."],
+    ["dbtenvcheck", "dbt_check_board_environment", "Check whether the board environment is installed and ready."],
+    ["dbtenvinstall", "dbt_install_board_environment", "Install or repair a board environment through local dbt-agentd."],
+    ["dbtusbnet", "dbt_ensure_usbnet", "Ensure host USB network configuration for the connected board."],
+    ["dbtupdatelogo", "dbt_update_logo", "Update the board startup logo from a workspace image."],
+    ["dbtchipprobe", "dbt_probe_chip_control", "Probe live chip-control data such as CPU, DDR, temperature, memory, or storage."],
+    ["dbtcpufrequency", "dbt_get_cpu_frequency", "Get current CPU frequency."],
+    ["dbtddrfrequency", "dbt_get_ddr_frequency", "Get current DDR frequency."],
+    ["dbtcputemperature", "dbt_get_cpu_temperature", "Get current CPU or SoC temperature."],
+    ["dbtprocesses", "dbt_list_board_processes", "List current Linux-board processes from the connected development board."],
+    ["dbtwirelessprobe", "dbt_probe_wifi_bluetooth", "Probe WiFi or Bluetooth state."],
+    ["dbtconnectwifi", "dbt_connect_wifi", "Connect the board to WiFi."],
+    ["dbtwifiscan", "dbt_scan_wifi_networks", "Scan nearby WiFi networks."],
+    ["dbtbluetoothscan", "dbt_scan_bluetooth_devices", "Scan nearby Bluetooth devices."],
+    ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability."],
+    ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
+    ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
+  ]
+  for (const [aliasName, targetName, description] of aliasSpecs) {
+    tools[aliasName] = tool({
+      description,
+      args: {
+        request: tool.schema.string().optional(),
+        arguments_json: tool.schema.string().optional(),
+      },
+      async execute(args) {
+        const selected = dispatchTools[targetName]
+        if (!selected || typeof selected.execute !== "function") {
+          return jsonText({
+            ok: false,
+            error_code: "alias_target_missing",
+            error_message: `Alias target not found: ${targetName}`,
+          })
+        }
+        const dispatchArgs = parseDispatchArguments(args)
+        if (dispatchArgs.ok === false) return jsonText(dispatchArgs)
+        return selected.execute(dispatchArgs)
+      },
+    })
+  }
+
   const retiredToolNames = new Set([
     "dbt_get_camera_preview_command",
     "dbt_submit_insight_bundle",
@@ -3012,38 +4141,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
   }
 
   if (!advancedToolsEnabled()) {
-    const defaultToolNames = new Set([
-      "dbt_current_board_status",
-      "dbt_rp2350_detect",
-      "dbt_rp2350_set_board_model",
-      "dbt_rp2350_enter_bootsel",
-      "dbt_rp2350_flash",
-      "dbt_rp2350_verify",
-      "dbt_rp2350_run",
-      "dbt_rp2350_tail_logs",
-      "dbt_rp2350_save_flash",
-      "dbt_rp2350_build_flash_source",
-      "dbt_check_board_environment",
-      "dbt_install_board_environment",
-      "dbt_prepare_request",
-      "dbt_list_capability_summaries",
-      "dbt_get_board_capabilities",
-      "dbt_get_board_config",
-      "dbt_get_capability_context",
-      "dbt_probe_chip_control",
-      "dbt_get_cpu_frequency",
-      "dbt_get_ddr_frequency",
-      "dbt_get_cpu_temperature",
-      "dbt_probe_wifi_bluetooth",
-      "dbt_connect_wifi",
-      "dbt_scan_wifi_networks",
-      "dbt_scan_bluetooth_devices",
-      "dbt_ensure_usbnet",
-      "dbt_update_logo",
-      "dbt_build_run_program",
-      "dbt_check_plugin_update",
-      "dbt_update_plugin",
-    ])
+    const defaultToolNames = defaultOpenCodeToolNames(connectedBoardForToolSurface)
     for (const name of Object.keys(tools)) {
       if (!defaultToolNames.has(name)) {
         delete tools[name]
@@ -3054,9 +4152,14 @@ export const DevelopmentBoardToolchainPlugin = async () => {
   return {
     tool: tools,
     "tool.definition": async (input, output) => {
+      if (guidanceDisabled()) return
       if (input.toolID === "bash") {
         output.description =
           "Host bash runs only on the local macOS machine. Never use host bash for board-side commands, board status, GPIO, camera, WiFi, Bluetooth, flashing, or deployment when a DBT tool or capability context exists. For board operations, use DBT tools instead."
+      }
+      if (input.toolID === "dbttool") {
+        output.description =
+          "Use this dispatcher for all DBT operations with Gemini. Common actions: status for current board status; processes for Linux-board process lists; flash-image for blocking TaishanPi dry-run or short image flashing; flash-start plus job-status for long real flashing progress; env-check for environment preflight; board-config for board/runtime config; capabilities or capability-context for knowledge; chip-probe/cpu-frequency/ddr-frequency/cpu-temperature for live chip data; wireless-probe/scan-wifi/scan-bluetooth/connect-wifi for wireless workflows. Pass tool-specific arguments as a JSON object string in arguments_json."
       }
       if (input.toolID === "dbt_current_board_status") {
         output.description =
@@ -3134,6 +4237,10 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         output.description =
           "Use this for direct CPU or SoC temperature questions and answer from summary_for_user."
       }
+      if (input.toolID === "dbt_list_board_processes" || input.toolID === "dbtprocesses") {
+        output.description =
+          "Use this for Linux-board process-list questions such as '当前开发板有哪些进程'. It returns structured process rows from the board through local dbt-agentd. Do not use host bash, SSH shell commands, or capability lookups for this."
+      }
       if (input.toolID === "dbt_probe_wifi_bluetooth") {
         output.description =
           "For live WiFi or Bluetooth status questions, call this tool directly and answer from summary_for_user or the returned live probe fields."
@@ -3146,19 +4253,50 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         output.description =
           "For nearby Bluetooth scan requests, call this tool directly and summarize discovered devices or the adapter error."
       }
+      if (input.toolID === "dbt_flash_image") {
+        output.description =
+          "Use this for TaishanPi or other supported Linux-board factory/custom image flashing and initialization-image burning. Default image_source=factory and scope=all unless the user specifies otherwise. Do not run dbtctl, dbtctl --help, host bash flashing commands, or project-tree binaries; dbt-agentd selects running/download mode and performs the installed-runtime flash workflow."
+      }
+      if (input.toolID === "dbt_start_flash_image" || input.toolID === "dbtflashstart") {
+        output.description =
+          "Use this to start a long real image flashing job without blocking the whole OpenCode turn. Return the job_id to the user, then call dbt_get_job_status or dbtjobstatus with that job_id to show progress."
+      }
+      if (input.toolID === "dbt_get_job_status" || input.toolID === "dbtjobstatus") {
+        output.description =
+          "Use this to poll a local dbt-agentd job by job_id. Summarize progress_percent, status_label, output_tail, terminal state, and failure_summary directly to the user."
+      }
     },
     "experimental.chat.system.transform": async (_input, output) => {
+      if (guidanceDisabled()) return
+      const visibleToolNames = Object.keys(tools)
+      const aliasToolNames = geminiAliasToolNames()
+      const aliasOnly = visibleToolNames.length > 0 && visibleToolNames.every((name) => aliasToolNames.has(name))
+      if (aliasOnly) {
+        output.system.push(
+          "For Development Board Toolchain requests, call the DBT alias tools. Use dbtstatus for current board status, dbtflashimage for blocking dry-run or short TaishanPi factory/custom image flashing, dbtflashstart plus dbtjobstatus for long real flashing progress, dbtenvcheck for preflight, dbtboardconfig for config, dbtcapabilities or dbtcapabilitycontext for knowledge, dbtprocesses for Linux-board process lists, and dbtchipprobe/dbtcpufrequency/dbtddrfrequency/dbtcputemperature/dbtwirelessprobe/dbtwifiscan/dbtbluetoothscan for live probes.",
+        )
+        output.system.push(
+          "For long real image flashing, prefer dbtflashstart with arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}, return the job_id, then call dbtjobstatus with that job_id to show current progress. Use dbtflashimage with {\"dry_run\":\"true\"} for validation without real flashing.",
+        )
+        output.system.push(
+          "Do not run dbtctl, dbtctl --help, host bash flashing commands, or source-checkout DBT-Agent-Project/docker-project binaries for board operations. The local dbt-agentd runtime owns status, mode detection, flashing, probes, and tool events.",
+        )
+        return
+      }
       output.system.push(
-        "For live board status, connection, USB ECM, SSH, control-service, or execution-precheck questions, call dbt_current_board_status first and answer from that result.",
+        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and pass extra arguments as JSON in arguments_json.",
       )
       output.system.push(
-        "dbt_current_board_status already includes connected devices and the active device. Do not call dbt_list_connected_devices unless the user explicitly needs raw device_id values or a dedicated connected-device list.",
+        "For live board status, connection, USB ECM, SSH, control-service, or execution-precheck questions, call dbttool with action=status first and answer from that result.",
+      )
+      output.system.push(
+        "dbttool action=status already includes connected devices and the active device. Do not call action=list-devices unless the user explicitly needs raw device_id values or a dedicated connected-device list.",
       )
       output.system.push(
         "If multiple devices are connected and the user needs to target one specific device for a mutating action, only then use dbt_list_connected_devices to obtain exact device_id values.",
       )
       output.system.push(
-        "For requests that ask which devices are currently connected, prefer dbt_current_board_status first because it already contains the device list. Only fall back to dbt_list_connected_devices when the user explicitly asks for raw device ids.",
+        "For requests that ask which devices are currently connected, prefer dbttool action=status first because it already contains the device list. Only fall back to action=list-devices when the user explicitly asks for raw device ids.",
       )
       output.system.push(
         "If a DBT tool returns ok=false, tool_error=true, or summary_for_user that describes a failure or timeout, summarize that failure directly to the user in the same turn. Do not end with an empty reply.",
@@ -3229,6 +4367,12 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "If the user asks to run, execute, deploy, burn, or flash something on the connected board, do not stop after drafting code or explaining the plan. Continue to the DBT execution tool that performs the action unless preflight or live availability blocks it.",
       )
       output.system.push(
+        "For TaishanPi initialization-image burning or full-board image flashing, use dbt_start_flash_image with image_source=factory and scope=all for long real flashing so progress can be polled with dbt_get_job_status. Use dbt_flash_image only for blocking dry-run or when the user explicitly wants to wait for completion in one tool call. Do not call dbtctl --help, do not execute dbtctl through host bash, and do not use DBT-Agent-Project or docker-project development paths for board operations.",
+      )
+      output.system.push(
+        "The OpenCode plugin is an installed-runtime client. Board control, flashing, status, and probes must go through local dbt-agentd and files under ~/Library/Application Support/development-board-toolchain, not source checkout paths.",
+      )
+      output.system.push(
         "For run or execute requests, do not end with a raw source code block unless the user explicitly asked for code only. If live execution is available, continue to dbt_build_run_program.",
       )
       output.system.push(
@@ -3239,6 +4383,9 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       )
       output.system.push(
         "For live CPU, DDR, temperature, memory, or storage questions, prefer dbt_probe_chip_control directly instead of broad planning or generic capability lookups.",
+      )
+      output.system.push(
+        "For Linux-board process-list questions such as '当前开发板有哪些进程', prefer dbt_list_board_processes or dbttool action=processes. Do not answer these requests with host bash, SSH shell narration, or capability context.",
       )
       output.system.push(
         "For direct CPU frequency, DDR frequency, or CPU temperature questions, prefer the dedicated DBT chip-state tools before generic planning.",
@@ -3280,11 +4427,13 @@ export const DevelopmentBoardToolchainPlugin = async () => {
   }
 }
 
-DevelopmentBoardToolchainPlugin.id = "development-board-toolchain"
-DevelopmentBoardToolchainPlugin.displayName = "development-board-toolchain"
+DevelopmentBoardToolchainPlugin.id = "DBT-Agent"
+DevelopmentBoardToolchainPlugin.displayName = "DBT-Agent"
 DevelopmentBoardToolchainPlugin.pluginInfo = pluginInfo
 
 export default {
-  id: "development-board-toolchain",
+  id: "DBT-Agent",
+  displayName: "DBT-Agent",
+  description: "development-board-toolchain board control, capability planning, flashing, and environment tooling for OpenCode.",
   server: DevelopmentBoardToolchainPlugin,
 }
