@@ -34,10 +34,25 @@ When `source/plugin/` or `source/marketplace.json` changes, sync the release ass
 - Plugin id: `dbt-agent`
 - Plugin display name: `DBT-Agent`
 - Full product name in descriptions: `Development Board Toolchain`
-- Developer: `kvell`
+- Developer: `Kvell`
 - Website: `https://kong-cn.com/`
 
 `DBT` is the short form of `Development Board Toolchain`. `DBT-Agent` is the Codex-facing plugin name.
+
+On current Codex, DBT-Agent is installed as one plugin inside Codex's generic
+local `plugins` marketplace. The marketplace entry lives at
+`~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`, keeps
+`name=plugins`, and points to `./plugins/dbt-agent`.
+
+Fallback for older Codex layouts without that generic marketplace is the
+home-local `~/.agents/plugins/marketplace.json` marketplace with
+`name=dbt-agent-local`, pointing to `./.codex/plugins/dbt-agent`.
+
+Do not restore the old long marketplace name
+`local-development-board-marketplace`; it truncates poorly in the Codex plugin
+directory UI. Do not rename Codex's generic `plugins` marketplace to
+DBT-Agent, because that creates a separate DBT-Agent category and can label
+unrelated plugins incorrectly.
 
 ## Runtime relationship
 
@@ -45,13 +60,64 @@ This plugin does not embed a separate board-control runtime.
 
 It always uses the shared runtime installed at:
 
-- `~/Library/Application Support/development-board-toolchain/runtime`
+- `~/Library/development-board-toolchain/runtime`
 
 and the shared local backend agent at:
 
-- `~/Library/Application Support/development-board-toolchain/agent`
+- `~/Library/development-board-toolchain/agent`
 
 GUI, OpenCode, and Codex all call the same runtime and `dbt-agentd`.
+
+Codex CLI uses the same installed local plugin. It should call the installed MCP bridge and runtime under:
+
+- `~/Library/development-board-toolchain/runtime/editor_plugins/codex/bin/dbt-agent-mcp-bridge`
+- `~/Library/development-board-toolchain/runtime/dbtctl`
+
+Do not point Codex prompts or plugin configs at this source checkout for normal board operations.
+Installed skill guidance must answer user-facing board feature and capability
+questions from DBT tool results and installed capability data, not from private
+maintainer docs or source-checkout paths.
+
+## Terminal Usage
+
+After the plugin is installed, verify Codex sees the local MCP entry:
+
+```bash
+codex mcp list
+```
+
+Check the current board through Codex CLI:
+
+```bash
+codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 DBT-Agent 查看当前开发板状态，只调用 dbt_current_board_status。'
+```
+
+The `-C` path above is maintainer-only. End-user plugin guidance and model answers must not cite this source checkout path; normal board operations use the installed runtime under `~/Library/development-board-toolchain`.
+
+Switch a connected TaishanPi to Loader mode through Codex CLI:
+
+```bash
+codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 DBT-Agent 将当前 TaishanPi 切换到 Loader 模式。直接调用 dbt_reboot_loader，不要查 capability，不要运行 shell。完成后调用 dbt_current_board_status 确认 USB mode。'
+```
+
+For local diagnosis without the LLM, call the shared `dbt-agentd` API or the installed runtime directly:
+
+```bash
+curl -sS -X POST http://127.0.0.1:18082/v1/tools/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"tool_name":"reboot_loader","arguments":{},"request_context":{"client_id":"terminal","session_id":"manual","client_type":"terminal","request_id":"reboot-loader"}}'
+
+"$HOME/Library/development-board-toolchain/runtime/dbtctl" status --json
+"$HOME/Library/development-board-toolchain/runtime/dbtctl" usb reboot-loader --json --quiet
+```
+
+## Tool event reporting
+
+Codex-side MCP tool calls are captured by `dbt-agentd` under the shared local tool-event protocol:
+
+- [../../dbt-agentd/dbt-agentd-project/protocols/LOCAL_TOOL_EVENT_PROTOCOL.md](../../dbt-agentd/dbt-agentd-project/protocols/LOCAL_TOOL_EVENT_PROTOCOL.md)
+
+Any future Codex-specific failure reporting should still route through `dbt-agentd`, not a direct remote uploader.
 
 ## Covered boards
 
@@ -64,7 +130,7 @@ GUI, OpenCode, and Codex all call the same runtime and `dbt-agentd`.
 - `source/plugin/.codex-plugin/plugin.json`
   - Codex plugin manifest
 - `source/plugin/.mcp.json`
-  - development-time MCP entry that points to `dbt-agentd`
+  - plugin MCP entry template; installation rewrites it to the installed runtime-shared `dbt-agent-mcp-bridge`
 - `release/install.sh`
   - standalone installer for local Codex distribution
 - `release/manifest.json`

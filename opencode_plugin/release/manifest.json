@@ -2,9 +2,9 @@
   "product": "opencode_plugin",
   "name": "DBT-Agent",
   "package_name": "dbt-agent",
-  "version": "1.0.6",
+  "version": "1.0.11",
   "entry": "package/index.js",
   "installer": "install.sh",
   "runtime_required": true,
-  "runtime_install_dir": "~/Library/Application Support/development-board-toolchain/runtime"
+  "runtime_install_dir": "~/Library/development-board-toolchain/runtime"
 }

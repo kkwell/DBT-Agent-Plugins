@@ -10,8 +10,8 @@ End users should prefer the GitHub Releases page:
 
 Current archive naming:
 
-- `DBT-Agent-OpenCode-v1.0.6.zip`
-- `DBT-Agent-Codex-v1.0.6.zip`
+- `DBT-Agent-OpenCode-v1.0.11.zip`
+- `DBT-Agent-Codex-v1.0.11.zip`
 
 ## Choose Your Platform
 
@@ -67,6 +67,17 @@ After the runtime is installed, rerun the platform installer:
 
 If the Codex archive reports an MCP probe failure, the offline runtime package is still an older build.
 Update the runtime package first, then rerun the archive installer.
+
+## Board Development Environments
+
+Board-family development environments are large and remain separate offline downloads. The plugin
+release manifest advertises the available family packages, but the user still chooses and installs
+the package for the board family they want to use.
+
+- TaishanPi development requires the `TaishanPi` offline package.
+- `ColorEasyPICO2` and `RaspberryPiPico2W` firmware builds require the shared `RP2350` offline package.
+- If a user later switches board families, DBT tools should report the missing package and ask the
+  user to install it before continuing with model-driven build work.
 
 ## Platform Docs
 

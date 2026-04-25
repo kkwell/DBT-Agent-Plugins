@@ -47,9 +47,9 @@ Important directories:
 
 All platform plugins share one local runtime root:
 
-- `~/Library/Application Support/development-board-toolchain/runtime`
+- `~/Library/development-board-toolchain/runtime`
 - board-family assets resolve from:
-  - `~/Library/Application Support/development-board-toolchain/families/`
+  - `~/Library/development-board-toolchain/families/`
 
 Platform plugins themselves install into platform-specific client directories.
 
@@ -66,7 +66,7 @@ For OpenCode:
   - `opencode-plugin-release-manifest.json`
   - `https://github.com/kkwell/DBT-Agent-Plugins.git`
 - shared runtime:
-  - `~/Library/Application Support/development-board-toolchain/runtime`
+  - `~/Library/development-board-toolchain/runtime`
 
 The OpenCode plugin should present itself as:
 
@@ -76,8 +76,9 @@ The OpenCode plugin should present itself as:
   - `development-board-toolchain`
 
 OpenCode board operations are installed-runtime only. The plugin must call local `dbt-agentd`
-tools and runtime files under Application Support; it must not use `DBT-Agent-Project`,
+tools and runtime files under `~/Library/development-board-toolchain`; it must not use `DBT-Agent-Project`,
 `docker-project`, or source-checkout `dbtctl` paths for normal board control.
+User-facing answers about board features, characteristics, supported functions, and coding constraints must be based on DBT runtime tool results and installed capability data. Maintainer source paths and local handoff documents are not user-visible product knowledge.
 
 For TaishanPi initialization-image or full-board image flashing, OpenCode has two paths:
 
@@ -126,11 +127,33 @@ opencode plugin dbt-agent
 ## Update responsibility
 
 - shared runtime package:
-  - distributed separately, but always installed into Application Support
+  - distributed separately, but always installed into `~/Library/development-board-toolchain`
 - OpenCode plugin:
   - distributed from `opencode_plugin/release/`
 - board plugins:
   - distributed independently from their own release channel
+
+## Release and update protocol
+
+The platform plugin repository is the core update channel for model-facing DBT integrations:
+
+- release repository:
+  - `https://github.com/kkwell/DBT-Agent-Plugins.git`
+- update manifest:
+  - `opencode-plugin-release-manifest.json`
+- release version:
+  - one repository-level plugin release version must be shared by the OpenCode and Codex release manifests
+- GUI release:
+  - the macOS GUI is a separate optional convenience client
+  - GUI packages use their own `toolkit-manifest.json` from the GUI release repository
+  - GUI version changes must not be used to decide whether core plugin/runtime/board-environment updates are available
+
+Board-family development environments stay offline and manual because they are large:
+
+- `TaishanPi` users install the `TaishanPi` offline package when they need TaishanPi build/development support
+- `ColorEasyPICO2` and `RaspberryPiPico2W` share the `RP2350` offline package when local C/C++ firmware builds are needed
+- if a user later asks the model to use a different board family and the required environment is missing, the plugin/runtime should report the exact package family to download and install before continuing
+- updated board-environment package versions can be advertised through the `DBT-Agent-Plugins` release manifest and GitHub release assets, but tools must not silently download large environments without the user explicitly taking the offline install step
 
 ## Failure telemetry rule
 
@@ -179,15 +202,31 @@ Important directories:
 
 Codex uses the same shared runtime root:
 
-- `~/Library/Application Support/development-board-toolchain/runtime`
+- `~/Library/development-board-toolchain/runtime`
 
-The local Codex plugin package installs into:
+When Codex exposes its generic local plugin mirror, the local Codex plugin package installs into:
 
-- `~/.codex/plugins/dbt-agent`
+- `~/.codex/.tmp/plugins/plugins/dbt-agent`
 
-The local Codex marketplace entry installs into:
+And the marketplace entry is merged into:
+
+- `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`
+
+That marketplace identity must remain:
+
+- marketplace `name`: `plugins`
+- marketplace `interface.displayName`: `Plugins`
+- plugin package `name`: `dbt-agent`
+- plugin source path from the generic marketplace: `./plugins/dbt-agent`
+
+Fallback for older Codex layouts without the generic marketplace is still the home-local marketplace:
 
 - `~/.agents/plugins/marketplace.json`
+- marketplace `name`: `dbt-agent-local`
+- plugin source path: `./.codex/plugins/dbt-agent`
+
+Do not use the old long marketplace name `local-development-board-marketplace`; it can overflow or cover the plugin title in Codex's plugin card UI.
+Do not rename Codex's generic `plugins` marketplace to `DBT-Agent`; that creates a separate DBT-Agent dropdown category and can label unrelated plugins incorrectly.
 
 ## Codex install flow
 
@@ -200,6 +239,14 @@ The local Codex marketplace entry installs into:
 
 3. Restart Codex.
 4. Open the plugin list and use `DBT-Agent`.
+
+Expected installed state on current Codex:
+
+- `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json` keeps `name=plugins` and contains one `dbt-agent` entry
+- `~/.codex/config.toml` contains only `[plugins."dbt-agent@plugins"]` for DBT-Agent
+- `~/.codex/plugins/cache/plugins/dbt-agent/<version>` is the active DBT-Agent plugin cache
+- `~/.agents/plugins/marketplace.json` has no DBT-only standalone marketplace entry
+- stale `dbt-agent-local/dbt-agent`, `openai-curated/dbt-agent`, and `local-development-board-marketplace/dbt-agent` caches are absent
 
 ## Codex CLI usage
 
@@ -215,7 +262,8 @@ For terminal-driven TaishanPi Loader switching, ask Codex CLI to call the DBT to
 codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 DBT-Agent 将当前 TaishanPi 切换到 Loader 模式。直接调用 dbt_reboot_loader，不要查 capability，不要运行 shell。完成后调用 dbt_current_board_status 确认 USB mode。'
 ```
 
-Normal board operations must resolve to the installed runtime under `~/Library/Application Support/development-board-toolchain/`, not to source-checkout binaries.
+Normal board operations must resolve to the installed runtime under `~/Library/development-board-toolchain/`, not to source-checkout binaries.
+For user-facing questions such as “当前开发板有什么功能和特点”, Codex should answer from DBT tool results and installed capability data, not from source-checkout docs. If a tool result contains a host path that is not needed for the answer, omit it; if a path must be shown, keep it under `~/Library/development-board-toolchain`.
 
 ## Codex maintenance rule
 

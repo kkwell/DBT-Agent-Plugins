@@ -9,10 +9,10 @@ COMMON_SH="${PLUGIN_ROOT}/../scripts/installer_common.sh"
 DEFAULT_OPENCODE_HOME="${HOME}/.config/opencode"
 DEFAULT_MODULE_NAME="dbt-agent"
 DEFAULT_PACKAGE_CACHE_DIR="${HOME}/.cache/opencode/packages/${DEFAULT_MODULE_NAME}@latest"
-DEFAULT_STAGING_DIR="${DEFAULT_OPENCODE_HOME}/vendor/${DEFAULT_MODULE_NAME}"
+DEFAULT_STAGING_DIR=""
 LEGACY_INSTALL_DIR="${DEFAULT_OPENCODE_HOME}/plugins/development-board-toolchain"
 LEGACY_MODULE_DIR="${DEFAULT_OPENCODE_HOME}/node_modules/${DEFAULT_MODULE_NAME}"
-DEFAULT_RUNTIME_ROOT="${HOME}/Library/Application Support/development-board-toolchain/runtime"
+DEFAULT_RUNTIME_ROOT="${HOME}/Library/development-board-toolchain/runtime"
 DEFAULT_UPDATE_MANIFEST_URL="https://raw.githubusercontent.com/kkwell/DBT-Agent-Plugins/main/opencode-plugin-release-manifest.json"
 DEFAULT_UPDATE_REPOSITORY="https://github.com/kkwell/DBT-Agent-Plugins.git"
 DEFAULT_UPDATE_VERSION_URL="https://raw.githubusercontent.com/kkwell/DBT-Agent-Plugins/main/VERSION"
@@ -25,6 +25,7 @@ INSTALL_DIR_ARG=""
 WITH_OPENCODE=0
 FORCE=0
 CHECK_ONLY=0
+AUTO_STAGING_DIR=""
 
 if [[ ! -f "${COMMON_SH}" ]]; then
   echo "error: installer helper not found: ${COMMON_SH}" >&2
@@ -73,10 +74,11 @@ validate_release_layout() {
 validate_environment() {
   require_macos
   require_command npm "npm is required to install the OpenCode package cache"
-  require_command python3 "python3 is required to update OpenCode config"
   validate_release_layout
   ensure_parent_dir "${PACKAGE_CACHE_DIR}"
-  ensure_parent_dir "${STAGING_DIR}"
+  if [[ -n "${STAGING_DIR}" ]]; then
+    ensure_parent_dir "${STAGING_DIR}"
+  fi
   ensure_parent_dir "${RUNTIME_ROOT}"
 
   if [[ ! -d "${DEFAULT_OPENCODE_HOME}" ]]; then
@@ -96,7 +98,11 @@ print_environment_summary() {
   print_summary_line "module name" "${DEFAULT_MODULE_NAME}"
   print_summary_line "package cache" "${PACKAGE_CACHE_DIR}"
   print_summary_line "installed module" "$(module_install_dir "${PACKAGE_CACHE_DIR}")"
-  print_summary_line "staging dir" "${STAGING_DIR}"
+  if [[ -n "${STAGING_DIR}" ]]; then
+    print_summary_line "staging dir" "${STAGING_DIR}"
+  else
+    print_summary_line "staging dir" "temporary"
+  fi
   print_summary_line "runtime root" "${RUNTIME_ROOT}"
   print_summary_line "runtime status" "present"
   if [[ -e "${PACKAGE_CACHE_DIR}" && "${FORCE}" -ne 1 ]]; then
@@ -131,22 +137,6 @@ write_runtime_config() {
 EOF
 }
 
-write_package_cache_manifest() {
-  local target="$1"
-  local tarball_path="$2"
-  local tarball_spec_json
-
-  tarball_spec_json="$(json_escape "file:${tarball_path}")"
-
-  cat > "${target}" <<EOF
-{
-  "dependencies": {
-    "${DEFAULT_MODULE_NAME}": "${tarball_spec_json}"
-  }
-}
-EOF
-}
-
 update_opencode_config() {
   local config_path="${DEFAULT_OPENCODE_HOME}/opencode.json"
   if [[ ! -f "${config_path}" ]]; then
@@ -154,42 +144,40 @@ update_opencode_config() {
     return
   fi
 
-  python3 - "${config_path}" "${DEFAULT_MODULE_NAME}" "${LEGACY_INSTALL_DIR}" <<'PY'
-import json
-import os
-import sys
+  node - "${config_path}" "${DEFAULT_MODULE_NAME}" "${LEGACY_INSTALL_DIR}" <<'NODE'
+const fs = require("node:fs")
 
-config_path, module_name, legacy_install_dir = sys.argv[1:4]
+const [configPath, moduleName, legacyInstallDir] = process.argv.slice(2)
 
-with open(config_path, "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-plugins = data.get("plugin")
-if not isinstance(plugins, list):
-    plugins = []
-
-legacy_specs = {
-    "./plugins/development-board-toolchain",
-    "development-board-toolchain",
-    legacy_install_dir,
-    f"file://{legacy_install_dir}",
+let data = {}
+try {
+  data = JSON.parse(fs.readFileSync(configPath, "utf8"))
+} catch {
+  data = {}
 }
 
-next_plugins = []
-for entry in plugins:
-    if isinstance(entry, str) and entry in legacy_specs:
-        continue
-    next_plugins.append(entry)
+const plugins = Array.isArray(data.plugin) ? data.plugin : []
+const legacySpecs = new Set([
+  "./plugins/development-board-toolchain",
+  "development-board-toolchain",
+  "rk356x-toolkit",
+  legacyInstallDir,
+  `file://${legacyInstallDir}`,
+])
 
-if module_name not in next_plugins:
-    next_plugins.append(module_name)
-
-data["plugin"] = next_plugins
-
-with open(config_path, "w", encoding="utf-8") as handle:
-    json.dump(data, handle, ensure_ascii=False, indent=2)
-    handle.write("\n")
-PY
+const filtered = []
+for (const entry of plugins) {
+  if (typeof entry === "string" && (legacySpecs.has(entry) || entry.startsWith("file:"))) {
+    continue
+  }
+  filtered.push(entry)
+}
+if (!filtered.includes(moduleName)) {
+  filtered.push(moduleName)
+}
+data.plugin = filtered
+fs.writeFileSync(configPath, `${JSON.stringify(data, null, 2)}\n`, "utf8")
+NODE
 }
 
 cleanup_legacy_install_dir() {
@@ -204,24 +192,66 @@ cleanup_legacy_module_dir() {
   fi
 }
 
+cleanup_opencode_project_dependency_state() {
+  local config_root="${DEFAULT_OPENCODE_HOME}"
+  local package_json="${config_root}/package.json"
+  if [[ ! -f "${package_json}" ]]; then
+    return
+  fi
+
+  if npm uninstall --prefix "${config_root}" --silent --no-fund --no-audit \
+    dbt-agent development-board-toolchain development-board-toolchain-opencode-plugin rk356x-toolkit >/dev/null 2>&1; then
+    :
+  fi
+
+  rm -rf \
+    "${config_root}/node_modules/dbt-agent" \
+    "${config_root}/node_modules/development-board-toolchain" \
+    "${config_root}/plugins/development-board-toolchain" \
+    "${config_root}/plugins/rk356x-toolkit"
+}
+
 pack_release_tarball() {
   local tarball_name
+  local stage_dir="${STAGING_DIR}"
 
-  mkdir -p "${STAGING_DIR}"
-  tarball_name="$(npm pack "${PACKAGE_ROOT}" --silent --pack-destination "${STAGING_DIR}" | tail -n 1)"
+  if [[ -z "${stage_dir}" ]]; then
+    stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/dbt-opencode-plugin-stage.XXXXXX")"
+    AUTO_STAGING_DIR="${stage_dir}"
+  fi
+
+  mkdir -p "${stage_dir}"
+  tarball_name="$(npm pack "${PACKAGE_ROOT}" --silent --pack-destination "${stage_dir}" | tail -n 1)"
   [[ -n "${tarball_name}" ]] || fail "failed to create package tarball"
-  printf '%s/%s' "${STAGING_DIR}" "${tarball_name}"
+  printf '%s/%s' "${stage_dir}" "${tarball_name}"
 }
 
 install_package_cache() {
   local tarball_path="$1"
+  local target_module_dir
+  local temp_extract_dir
+  local extracted_package_dir
 
-  mkdir -p "${PACKAGE_CACHE_DIR}"
-  write_package_cache_manifest "${PACKAGE_CACHE_DIR}/package.json" "${tarball_path}"
+  target_module_dir="$(module_install_dir "${PACKAGE_CACHE_DIR}")"
+  temp_extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/dbt-opencode-cache.XXXXXX")"
+
+  mkdir -p "${PACKAGE_CACHE_DIR}/node_modules"
+  tar -xzf "${tarball_path}" -C "${temp_extract_dir}"
+  extracted_package_dir="${temp_extract_dir}/package"
+  [[ -d "${extracted_package_dir}" ]] || fail "failed to unpack plugin tarball: ${tarball_path}"
+
+  rm -rf "${target_module_dir}"
+  mkdir -p "${target_module_dir}"
+  rsync -aH --delete "${extracted_package_dir}/" "${target_module_dir}/"
   (
-    cd "${PACKAGE_CACHE_DIR}"
-    npm install --no-package-lock --silent
+    cd "${target_module_dir}"
+    npm install --no-package-lock --silent --omit=dev
   )
+  rm -f \
+    "${PACKAGE_CACHE_DIR}/package.json" \
+    "${PACKAGE_CACHE_DIR}/package-lock.json" \
+    "${PACKAGE_CACHE_DIR}/node_modules/.package-lock"
+  rm -rf "${temp_extract_dir}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -294,7 +324,7 @@ if [[ -e "${PACKAGE_CACHE_DIR}" ]]; then
   rm -rf "${PACKAGE_CACHE_DIR}"
 fi
 
-if [[ -e "${STAGING_DIR}" && "${FORCE}" -eq 1 ]]; then
+if [[ -n "${STAGING_DIR}" && -e "${STAGING_DIR}" && "${FORCE}" -eq 1 ]]; then
   rm -rf "${STAGING_DIR}"
 fi
 
@@ -309,9 +339,15 @@ require_file "${RUNTIME_CONFIG}" "runtime config was not written: ${RUNTIME_CONF
 update_opencode_config
 cleanup_legacy_install_dir
 cleanup_legacy_module_dir
+cleanup_opencode_project_dependency_state
+if [[ -n "${AUTO_STAGING_DIR}" ]]; then
+  rm -rf "${AUTO_STAGING_DIR}"
+fi
 
 echo "installed OpenCode plugin module (${DEFAULT_MODULE_NAME}) to: ${INSTALL_DIR}"
 echo "OpenCode package cache: ${PACKAGE_CACHE_DIR}"
-echo "local package tarball: ${TARBALL_PATH}"
+if [[ -n "${STAGING_DIR}" ]]; then
+  echo "local package tarball: ${TARBALL_PATH}"
+fi
 echo "shared runtime: ${RUNTIME_ROOT}"
 echo "next step: restart OpenCode and open a new session"

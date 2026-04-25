@@ -11,7 +11,7 @@ function homeDir() {
 }
 
 function defaultInstallRoot() {
-  return path.join(homeDir(), "Library", "Application Support", "development-board-toolchain")
+  return path.join(homeDir(), "Library", "development-board-toolchain")
 }
 
 function defaultRuntimeRoot() {

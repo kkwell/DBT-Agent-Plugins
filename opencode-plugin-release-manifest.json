@@ -1,6 +1,60 @@
 {
   "name": "DBT-Agent OpenCode Plugin",
-  "version": "1.0.6",
+  "version": "1.0.11",
+  "protocol_version": 1,
+  "release_channel": "stable",
   "repository_url": "https://github.com/kkwell/DBT-Agent-Plugins.git",
-  "notes": "OpenCode checks this manifest for version metadata, then falls back to cloning the repository and running the bundled OpenCode installer."
+  "platforms": {
+    "opencode": {
+      "package_name": "dbt-agent",
+      "installer_path": "release/install-opencode.sh",
+      "install_target": "~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent"
+    },
+    "codex": {
+      "plugin_id": "dbt-agent",
+      "installer_path": "release/install-codex.sh",
+      "install_target": "~/.codex/plugins/dbt-agent"
+    }
+  },
+  "runtime": {
+    "install_root": "~/Library/development-board-toolchain",
+    "runtime_dir": "~/Library/development-board-toolchain/runtime",
+    "agent_dir": "~/Library/development-board-toolchain/agent",
+    "distribution": "offline",
+    "notes": "The shared runtime and local dbt-agentd are installed offline because board toolchains and development environments are large."
+  },
+  "board_offline_packages": {
+    "distribution_repository": "https://github.com/kkwell/DBT-Agent-Plugins/releases",
+    "manual_install_required": true,
+    "policy": "If a requested board-family development environment is missing, DBT tools must tell the model to ask the user to download and install that board-family offline package before continuing.",
+    "families": {
+      "TaishanPi": {
+        "package_id": "TaishanPi",
+        "contains": [
+          "TaishanPi board plugin",
+          "TaishanPi Docker compile-environment installer"
+        ]
+      },
+      "RP2350": {
+        "package_id": "RP2350",
+        "boards": [
+          "ColorEasyPICO2",
+          "RaspberryPiPico2W"
+        ],
+        "contains": [
+          "RP2350 board plugins",
+          "RP2350RuntimeCore",
+          "RP2350SDKCore",
+          "RP2350BuildOverlay/full_build"
+        ]
+      }
+    }
+  },
+  "gui": {
+    "optional": true,
+    "repository_url": "https://github.com/kkwell/development-board-toolchain-gui",
+    "manifest_url": "https://github.com/kkwell/development-board-toolchain-gui/releases/latest/download/toolkit-manifest.json",
+    "notes": "The macOS GUI is a convenience client and is not required for core model-driven board operations."
+  },
+  "notes": "OpenCode checks this manifest for plugin version metadata, then falls back to cloning the repository and running the bundled OpenCode installer. GUI updates are intentionally independent from the plugin/runtime update channel."
 }

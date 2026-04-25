@@ -1,0 +1,6 @@
+interface:
+  display_name: "DBT-Agent"
+  short_description: "Development Board Toolchain board operations"
+  icon_small: "./assets/app-logo.png"
+  icon_large: "./assets/app-logo.png"
+  default_prompt: "Use DBT-Agent for live development-board status, capability, build, flash, and runtime control through the local DBT-Agent runtime."

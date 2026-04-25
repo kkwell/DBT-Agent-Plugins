@@ -1,0 +1,6 @@
+interface:
+  display_name: "DBT-Agent TaishanPi"
+  short_description: "TaishanPi Linux-board control and build workflows"
+  icon_small: "./assets/app-logo.png"
+  icon_large: "./assets/app-logo.png"
+  default_prompt: "Use DBT-Agent TaishanPi for TaishanPi status, chip-control probes, build environment selection, custom-image flash, and board runtime workflows."

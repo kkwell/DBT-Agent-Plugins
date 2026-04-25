@@ -47,7 +47,7 @@ This repository currently contains two platform-specific plugin projects:
 Both platform plugins use the shared local Development Board Toolchain runtime:
 
 - runtime root:
-  - `~/Library/Application Support/development-board-toolchain/runtime`
+  - `~/Library/development-board-toolchain/runtime`
 
 OpenCode install:
 
@@ -76,8 +76,8 @@ Release entry for end users:
   - `./release/install-opencode.sh`
   - `./release/install-codex.sh`
 - downloadable archives:
-  - `DBT-Agent-OpenCode-v1.0.6.zip`
-  - `DBT-Agent-Codex-v1.0.6.zip`
+  - `DBT-Agent-OpenCode-v1.0.11.zip`
+  - `DBT-Agent-Codex-v1.0.11.zip`
 - offline runtime download:
   - [Baidu Netdisk runtime package](https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001)
   - password: `0001`
@@ -86,6 +86,11 @@ Runtime note:
 
 - the shared DBT runtime and `dbt-agentd` are not auto-downloaded by this repository
 - the runtime package is distributed offline because it contains large cross-compilers and board toolchains
+- board-family development environments are also offline/manual packages:
+  - a user who installed only the TaishanPi environment and later wants to use an RP2350 board such as `RaspberryPiPico2W` must download and install the `RP2350` offline package before local firmware builds can run
+  - the same rule applies in reverse for TaishanPi or future board families
+- `opencode-plugin-release-manifest.json` is the shared plugin/update manifest for OpenCode and for model-facing board-environment guidance
+- the macOS GUI release is a separate optional repository/channel; it is not required for core model-driven board control
 - Codex now launches the installed `dbt-agentd` binary directly through native MCP stdio mode
 - the Codex installer runs a native MCP probe before install, so older runtime bundles are rejected early
 - if a plugin task also requires runtime-side code changes, modify `DBT-Agent-Project/dbt-agentd/` and then sync the plugin-facing docs here

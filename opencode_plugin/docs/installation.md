@@ -2,7 +2,7 @@
 
 This plugin always uses the shared runtime installed at:
 
-- `~/Library/Application Support/development-board-toolchain/runtime`
+- `~/Library/development-board-toolchain/runtime`
 
 ## Requirements
 
@@ -73,22 +73,18 @@ The OpenCode plugin entry written into `opencode.json` is:
 
 - `dbt-agent`
 
-The local tarball staged by the standalone installer is written to:
-
-- `~/.config/opencode/vendor/dbt-agent`
-
 The runtime config written beside the plugin is:
 
 - `development-board-toolchain.runtime.json`
 
-It points to the shared runtime root under Application Support.
+It points to the shared runtime root under `~/Library/development-board-toolchain`.
 
 ## Runtime-Only Operation Rule
 
 After installation, OpenCode should use only the installed runtime and local daemon:
 
-- runtime: `~/Library/Application Support/development-board-toolchain/runtime`
-- agent: `~/Library/Application Support/development-board-toolchain/agent`
+- runtime: `~/Library/development-board-toolchain/runtime`
+- agent: `~/Library/development-board-toolchain/agent`
 - plugin module: `~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent`
 
 Board operations, including TaishanPi initialization-image flashing, must be performed through DBT
@@ -154,16 +150,36 @@ chat with:
 - `dbt_check_plugin_update`
 - `dbt_update_plugin`
 
+`dbt_update_plugin` overwrites the existing OpenCode package cache by default. This is intentional:
+updating `~/.cache/opencode/packages/dbt-agent@latest` without replacement fails when the package
+cache already exists. Pass `force=false` only for diagnostic dry runs where an existing cache should
+block the install.
+
+## Board Environment Updates
+
+Large board-family development environments are not auto-downloaded by the plugin.
+
+- If the user installed only the TaishanPi environment and later asks to use `RaspberryPiPico2W` or
+  `ColorEasyPICO2`, the model should tell the user to download and install the `RP2350` offline
+  package first.
+- If the user installed only the RP2350 environment and later asks to use TaishanPi, the model should
+  tell the user to download and install the `TaishanPi` offline package first.
+- Future board-family environment versions should be advertised through
+  `https://github.com/kkwell/DBT-Agent-Plugins.git` release metadata, while the actual heavy package
+  remains a user-confirmed offline install step.
+
 ## Verify The Installation
 
 - confirm the plugin module directory exists:
   - `~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent`
 - confirm `~/.config/opencode/opencode.json` contains:
   - `"dbt-agent"` in the `plugin` array
+- confirm `~/.config/opencode/opencode.json` no longer contains:
+  - `"./plugins/development-board-toolchain"`
+- confirm `~/.config/opencode/package.json` no longer contains:
+  - `"dbt-agent": "file:..."`
 - confirm the runtime config exists:
   - `~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent/development-board-toolchain.runtime.json`
-- confirm the local installer staged the package tarball:
-  - `~/.config/opencode/vendor/dbt-agent/`
 - restart OpenCode and open a new session
 
 ## Troubleshooting

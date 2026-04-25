@@ -1,0 +1,6 @@
+interface:
+  display_name: "DBT-Agent RP2350"
+  short_description: "RP2350 board flash, serial, and firmware workflows"
+  icon_small: "./assets/app-logo.png"
+  icon_large: "./assets/app-logo.png"
+  default_prompt: "Use DBT-Agent RP2350 for ColorEasyPICO2 and Raspberry Pi Pico 2 W BOOTSEL, flash, verify, serial, and firmware tasks."

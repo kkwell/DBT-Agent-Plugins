@@ -26,7 +26,7 @@ function opencodeConfigRoot() {
 }
 
 function defaultStandaloneRuntimeRoot() {
-  return path.join(homeDir(), "Library", "Application Support", "development-board-toolchain", "runtime")
+  return path.join(homeDir(), "Library", "development-board-toolchain", "runtime")
 }
 
 function readRuntimeConfig() {
@@ -76,12 +76,48 @@ function updateStatePath() {
   return path.join(pluginBaseDir(), "development-board-toolchain.update-state.json")
 }
 
+const UPDATE_CHECK_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const UPDATE_CHECK_RETRY_DEBOUNCE_MS = 10 * 60 * 1000
+const UPDATE_CHECK_STALE_RUNNING_MS = 2 * 60 * 1000
+
+function parseUpdateTimestamp(value) {
+  return Date.parse(asString(value) || "") || 0
+}
+
+function normalizeUpdateStateShape(state) {
+  const current =
+    state && typeof state === "object" && !Array.isArray(state)
+      ? { ...state }
+      : {}
+  const now = Date.now()
+  const lastStartedAt = parseUpdateTimestamp(current.last_started_at)
+  const staleRunning =
+    current.checking === true &&
+    (!lastStartedAt || now - lastStartedAt > UPDATE_CHECK_STALE_RUNNING_MS)
+
+  if (staleRunning) {
+    current.checking = false
+    current.last_started_at = ""
+    current.stale_check_recovered = true
+    current.last_stale_recovered_at = asString(current.last_stale_recovered_at) || isoNow()
+    current.message =
+      asString(current.message) ||
+      "Previous background update check did not finish. Returning cached update state and scheduling a fresh background refresh."
+  }
+
+  return current
+}
+
 function readUpdateState() {
   try {
     const target = updateStatePath()
     if (!existsSync(target)) return {}
     const parsed = JSON.parse(readFileSync(target, "utf8"))
-    return parsed && typeof parsed === "object" ? parsed : {}
+    const normalized = normalizeUpdateStateShape(parsed)
+    if (JSON.stringify(normalized) !== JSON.stringify(parsed)) {
+      writeFileSync(target, JSON.stringify(normalized, null, 2) + "\n", "utf8")
+    }
+    return normalized
   } catch {
     return {}
   }
@@ -141,7 +177,6 @@ function defaultToolEventRawRoot() {
   return path.join(
     homeDir(),
     "Library",
-    "Application Support",
     "development-board-toolchain",
     "agent",
     "insights",
@@ -577,10 +612,7 @@ function resolveToolkitRoot() {
     process.env.RK356X_TOOLKIT_ROOT || "",
     readRuntimeToolkitRoot(),
     defaultStandaloneRuntimeRoot(),
-    path.join(homeDir(), "Library", "Application Support", "development-board-toolchain", "runtime"),
-    path.join(homeDir(), "Library", "Application Support", "rk356x-mac-toolkit", "runtime"),
     path.resolve(pluginBaseDir(), "..", "development-board-toolchain-runtime"),
-    path.join(homeDir(), "rk356x-mac-toolkit"),
   ].filter(Boolean)
 
   for (const candidate of candidates) {
@@ -686,6 +718,7 @@ function buildPluginUpdateState({
   return {
     ...readUpdateState(),
     checking: false,
+    stale_check_recovered: false,
     last_checked_at: isoNow(),
     update_source: "",
     local_version: asString(localVersion) || "unknown",
@@ -698,6 +731,82 @@ function buildPluginUpdateState({
     update_repository: asString(repositorySource),
     manifest_unavailable: Boolean(manifestError),
     manifest_error: asString(manifestError),
+  }
+}
+
+function buildCachedPluginUpdateSnapshot(toolkitRoot, state, options = {}) {
+  const installRoot = inferInstallRoot(toolkitRoot)
+  const nextState =
+    state && typeof state === "object" && !Array.isArray(state)
+      ? { ...state }
+      : {}
+  const recoveredAt = parseUpdateTimestamp(nextState.last_stale_recovered_at)
+  const checkedAt = parseUpdateTimestamp(nextState.last_checked_at)
+  const recoveredBeforeThisReply =
+    recoveredAt > 0 && (!checkedAt || recoveredAt >= checkedAt)
+
+  nextState.toolkit_root = asString(nextState.toolkit_root) || installRoot
+  nextState.local_version = asString(nextState.local_version) || readLocalUpdateVersion(installRoot) || "unknown"
+  nextState.remote_version = asString(nextState.remote_version)
+  nextState.update_available = nextState.update_available === true
+  nextState.update_manifest_url = asString(nextState.update_manifest_url) || resolveUpdateManifestSource()
+  nextState.update_version_url = asString(nextState.update_version_url) || resolveUpdateVersionSource()
+  nextState.update_repository = asString(nextState.update_repository) || resolveUpdateRepository()
+  nextState.cache_mode = true
+  nextState.background_refresh_started = options.started === true
+
+  if (options.started === true && recoveredBeforeThisReply) {
+    nextState.checking = true
+    nextState.message =
+      "Recovered from a stale background update check. Returning cached update state immediately while a fresh background refresh runs."
+  } else if (options.started === true) {
+    nextState.checking = true
+    nextState.message =
+      asString(nextState.message) ||
+      "Background update refresh started. Returning the last cached update state immediately."
+  } else if (nextState.checking === true) {
+    nextState.message =
+      asString(nextState.message) ||
+      "Background update refresh is still running. Returning the last cached update state."
+  } else if (!asString(nextState.last_checked_at)) {
+    nextState.message =
+      asString(nextState.message) ||
+      "No completed update check is cached yet. A background refresh has been scheduled."
+  }
+
+  return nextState
+}
+
+function summarizeUpdateManifest(manifest) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) return null
+  return {
+    version: asString(manifest.version),
+    protocol_version: manifest.protocol_version || null,
+    release_channel: asString(manifest.release_channel),
+    repository_url: asString(manifest.repository_url),
+    runtime: manifest.runtime && typeof manifest.runtime === "object" && !Array.isArray(manifest.runtime)
+      ? {
+          install_root: asString(manifest.runtime.install_root),
+          runtime_dir: asString(manifest.runtime.runtime_dir),
+          agent_dir: asString(manifest.runtime.agent_dir),
+          distribution: asString(manifest.runtime.distribution),
+          notes: asString(manifest.runtime.notes),
+        }
+      : null,
+    board_offline_packages:
+      manifest.board_offline_packages &&
+      typeof manifest.board_offline_packages === "object" &&
+      !Array.isArray(manifest.board_offline_packages)
+        ? manifest.board_offline_packages
+        : null,
+    gui: manifest.gui && typeof manifest.gui === "object" && !Array.isArray(manifest.gui)
+      ? {
+          optional: manifest.gui.optional === true,
+          repository_url: asString(manifest.gui.repository_url),
+          manifest_url: asString(manifest.gui.manifest_url),
+          notes: asString(manifest.gui.notes),
+        }
+      : null,
   }
 }
 
@@ -868,23 +977,37 @@ function isHttpURL(value) {
 
 function maybeStartBackgroundUpdateCheck(toolkitRoot) {
   const state = readUpdateState()
+  const recoveredFromStale = state.stale_check_recovered === true
   const now = Date.now()
-  const lastCheckedAt = Date.parse(asString(state.last_checked_at) || "") || 0
-  const lastStartedAt = Date.parse(asString(state.last_started_at) || "") || 0
-  if (now - lastCheckedAt < 24 * 60 * 60 * 1000) return
-  if (now - lastStartedAt < 10 * 60 * 1000) return
+  const lastCheckedAt = parseUpdateTimestamp(state.last_checked_at)
+  const lastStartedAt = parseUpdateTimestamp(state.last_started_at)
+  if (state.checking === true && lastStartedAt && now - lastStartedAt < UPDATE_CHECK_STALE_RUNNING_MS) {
+    return { started: false, state }
+  }
+  if (lastCheckedAt && now - lastCheckedAt < UPDATE_CHECK_CACHE_TTL_MS) {
+    return { started: false, state }
+  }
+  if (lastStartedAt && now - lastStartedAt < UPDATE_CHECK_RETRY_DEBOUNCE_MS) {
+    return { started: false, state }
+  }
 
   const nextState = {
     ...state,
     last_started_at: isoNow(),
     checking: true,
+    stale_check_recovered: recoveredFromStale,
     toolkit_root: toolkitRoot,
+    local_version: asString(state.local_version) || readLocalUpdateVersion(toolkitRoot) || "unknown",
+    update_manifest_url: resolveUpdateManifestSource(),
+    update_version_url: resolveUpdateVersionSource(),
+    update_repository: resolveUpdateRepository(),
   }
   writeUpdateState(nextState)
 
 const worker = `
 import fs from "node:fs";
 import path from "node:path";
+import http from "node:http";
 import https from "node:https";
 
 const statePath = ${JSON.stringify(updateStatePath())};
@@ -933,11 +1056,12 @@ function finish(extra) {
     ...current,
     ...extra,
     checking: false,
+    stale_check_recovered: false,
     last_checked_at: new Date().toISOString(),
   });
 }
 
-function fetchRemoteVersion(url) {
+function fetchRemoteVersion(url, redirects = 0) {
   return new Promise((resolve) => {
     if (!/^https?:\\/\\//i.test(url)) {
       try {
@@ -951,7 +1075,18 @@ function fetchRemoteVersion(url) {
       return;
     }
 
-    const req = https.get(url, (res) => {
+    const transport = /^http:\\/\\//i.test(url) ? http : https;
+    const req = transport.get(url, (res) => {
+      if (
+        res.statusCode &&
+        res.statusCode >= 300 &&
+        res.statusCode < 400 &&
+        res.headers.location &&
+        redirects < 4
+      ) {
+        fetchRemoteVersion(new URL(res.headers.location, url).toString(), redirects + 1).then(resolve);
+        return;
+      }
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => {
@@ -960,14 +1095,14 @@ function fetchRemoteVersion(url) {
       });
     });
     req.on("error", () => resolve(null));
-    req.setTimeout(2500, () => {
+    req.setTimeout(4000, () => {
       req.destroy();
       resolve(null);
     });
   });
 }
 
-function fetchRemoteManifest(url) {
+function fetchRemoteManifest(url, redirects = 0) {
   return new Promise((resolve) => {
     if (!url) {
       resolve(null);
@@ -985,7 +1120,18 @@ function fetchRemoteManifest(url) {
       return;
     }
 
-    const req = https.get(url, (res) => {
+    const transport = /^http:\\/\\//i.test(url) ? http : https;
+    const req = transport.get(url, (res) => {
+      if (
+        res.statusCode &&
+        res.statusCode >= 300 &&
+        res.statusCode < 400 &&
+        res.headers.location &&
+        redirects < 4
+      ) {
+        fetchRemoteManifest(new URL(res.headers.location, url).toString(), redirects + 1).then(resolve);
+        return;
+      }
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => {
@@ -998,7 +1144,7 @@ function fetchRemoteManifest(url) {
       });
     });
     req.on("error", () => resolve(null));
-    req.setTimeout(2500, () => {
+    req.setTimeout(4000, () => {
       req.destroy();
       resolve(null);
     });
@@ -1051,6 +1197,7 @@ fetchRemoteManifest(manifestSource).then((manifest) => {
     env: process.env,
   })
   child.unref()
+  return { started: true, state: nextState }
 }
 
 function appendCachedUpdateNotice(payload, toolkitRoot) {
@@ -1112,7 +1259,16 @@ function normalizeVariantID(board, value) {
     }
   }
   if (board === "TaishanPi") {
-    if (["1m-rk3566", "1m rk3566", "rk3566", "rk3566-tspi-v10"].includes(lowered)) {
+    if (["1m-rk3566", "1m rk3566"].includes(lowered)) {
+      return "1M-RK3566"
+    }
+    if (["1f-rk3566", "1f rk3566"].includes(lowered)) {
+      return "1F-RK3566"
+    }
+    if (["3m-rk3576", "3m rk3576", "rk3576"].includes(lowered)) {
+      return "3M-RK3576"
+    }
+    if (["rk3566", "rk3566-tspi-v10"].includes(lowered)) {
       return "1M-RK3566"
     }
   }
@@ -1170,6 +1326,13 @@ function boolValue(value) {
   return text === "1" || text === "true" || text === "yes" || value === true
 }
 
+function boolValueDefault(value, defaultValue) {
+  const text = String(value ?? "").trim().toLowerCase()
+  if (value === true || text === "1" || text === "true" || text === "yes") return true
+  if (value === false || text === "0" || text === "false" || text === "no") return false
+  return defaultValue
+}
+
 function normalizeUserDBTText(text) {
   const raw = String(text ?? "")
   const trimmed = raw.trim()
@@ -1183,7 +1346,7 @@ function normalizeUserDBTText(text) {
     lowered === "查看当前开发板状态" ||
     lowered.includes("current board status")
   ) {
-    return "Call the exact DBT alias tool dbtstatus with request \"current board status\". Then summarize the result."
+    return "Call the exact DBT alias tool dbtstatus with request \"current board status\". Use summary_for_user as the compact status anchor, then answer naturally from the returned fields according to the user's wording."
   }
   if (
     (trimmed.includes("初始化镜像") || trimmed.includes("出厂镜像") || trimmed.includes("factory")) &&
@@ -1597,24 +1760,28 @@ function firstExistingPath(candidates) {
 }
 
 function detectRP2350BuildRoots() {
-  const supportRoot = path.join(homeDir(), "Library", "Application Support", "development-board-toolchain")
-  const runtimeRoot = path.join(
+  const supportRoot = path.join(homeDir(), "Library", "development-board-toolchain")
+  const boardEnvironmentRoot = path.join(
     supportRoot,
+    "families",
+    "rp2350",
+    "shared",
     "board-environments",
+  )
+  const runtimeRoot = path.join(
+    boardEnvironmentRoot,
     "RP2350RuntimeCore",
     "minimal_runtime",
     "RP2350",
   )
   const sdkCoreRoot = path.join(
-    supportRoot,
-    "board-environments",
+    boardEnvironmentRoot,
     "RP2350SDKCore",
     "sdk_core",
     "RP2350",
   )
   const buildOverlayRoot = path.join(
-    supportRoot,
-    "board-environments",
+    boardEnvironmentRoot,
     "RP2350BuildOverlay",
     "full_build",
     "RP2350",
@@ -1641,6 +1808,7 @@ function detectRP2350BuildRoots() {
   } catch {}
   return {
     support_root: supportRoot,
+    board_environment_root: boardEnvironmentRoot,
     runtime_root: existsSync(runtimeRoot) ? runtimeRoot : "",
     sdk_core_root: existsSync(sdkCoreRoot) ? sdkCoreRoot : "",
     build_overlay_root: existsSync(buildOverlayRoot) ? buildOverlayRoot : "",
@@ -1919,6 +2087,7 @@ function summarizeFlashImageJobPayload(payload) {
     summary_for_user: summary,
     image_source: asString(result.image_source || request.image_source),
     scope: asString(result.scope || request.scope),
+    build_mode: asString(result.build_mode || request.build_mode),
     host_image_dir: asString(result.host_image_dir || request.host_image_dir),
     mode: asString(result.mode || request.mode),
     dry_run: result.dry_run === true || request.dry_run === true,
@@ -2017,6 +2186,8 @@ async function createFlashImageJob(args = {}, options = {}) {
   }
   const hostImageDir = resolveWorkspacePath(args.host_image_dir)
   if (hostImageDir) payload.host_image_dir = hostImageDir
+  const buildMode = asString(args.build_mode)
+  if (buildMode) payload.build_mode = buildMode
   const mode = asString(args.mode)
   if (mode) payload.mode = mode
 
@@ -2474,9 +2645,10 @@ function buildStatusOverview(payload) {
   const summary = asString(payload.summary) || asString(runtimeStatus.summary) || (connected ? "开发板已连接" : "没有开发板设备连接")
   const deviceSummary = asString(payload.device_summary) || asString(runtimeStatus.device_summary)
   const updatedAt = asString(payload.updated_at) || asString(runtimeStatus.updated_at)
-  const usbEcmReady = payload.usb_ecm_ready === true
   const sshReady = payload.ssh_ready === true
   const controlServiceReady = payload.control_service_ready === true
+  const transportLooksUsbEcm = [transportName, interfaceName].some((value) => asString(value).toLowerCase().includes("usb ecm"))
+  const usbEcmReady = payload.usb_ecm_ready === true || (transportLooksUsbEcm && (sshReady || controlServiceReady))
   const rp2350State = asString(runtimeStatus.rp2350?.state).toLowerCase()
   const isRP2350 = boardID === "ColorEasyPICO2" || transportName.includes("RP2350") || rp2350State === "bootsel" || rp2350State === "runtime-resettable"
 
@@ -2499,26 +2671,20 @@ function buildStatusOverview(payload) {
       }
       if (updatedAt) lines.push(`更新时间：${updatedAt}`)
     } else {
-    lines.push(`设备：${boardID || "未知开发板"}${variantID ? ` / ${variantID}` : ""}`)
-    lines.push(`连接：已连接${transportName ? `，链路 ${transportName}` : ""}${interfaceName ? ` (${interfaceName})` : ""}`)
+    const display = `${boardID || "未知开发板"}${variantID ? ` / ${variantID}` : ""}`
+    const link = `${transportName ? `，链路 ${transportName}` : ""}${interfaceName ? ` (${interfaceName})` : ""}`
     if (isRP2350) {
       const runtimePort = asString(runtimeStatus.rp2350?.runtime_port?.device)
       const rpSummary = asString(runtimeStatus.rp2350?.summary_for_user) || asString(payload.summary) || deviceSummary || "单 USB 运行态已就绪"
-      if (runtimePort) {
-        lines.push(`串口：${runtimePort}`)
-      }
-      lines.push(`状态：${rpSummary}`)
-      lines.push("可用操作：进入 BOOTSEL、刷写 UF2、校验 UF2、恢复运行态、读取串口日志、回读 Flash")
-      if (updatedAt) lines.push(`更新时间：${updatedAt}`)
+      lines.push(`${display} 已连接${link}；${runtimePort ? `串口 ${runtimePort}；` : ""}${rpSummary}`)
     } else {
-      if (hostIP || boardIP) {
-        lines.push(`网络：主机 ${hostIP || "-"} / 开发板 ${boardIP || "-"}`)
-      }
-      lines.push(`USB ECM：${usbEcmReady ? "已就绪" : "未就绪"}`)
-      lines.push(`SSH：${sshReady ? "正常" : "不可用"}`)
-      lines.push(`控制服务：${controlServiceReady ? "正常" : "不可用"}`)
-      if (deviceSummary) lines.push(`链路摘要：${deviceSummary}`)
-      if (updatedAt) lines.push(`更新时间：${updatedAt}`)
+      const statusBits = [
+        `USB ECM ${usbEcmReady ? "可用" : "未就绪"}`,
+        `SSH ${sshReady ? "正常" : "不可用"}`,
+        `控制服务 ${controlServiceReady ? "正常" : "不可用"}`,
+      ]
+      if (deviceSummary && !deviceSummary.includes("USB ECM")) statusBits.push(deviceSummary)
+      lines.push(`${display} 已连接${link}；${statusBits.join("，")}`)
     }
     }
   } else {
@@ -2689,12 +2855,21 @@ async function getStatusWithAutoRepair() {
   }
 }
 
+function buildCachedStatusFailurePayload(error) {
+  return buildToolFailurePayload("dbt_current_board_status", error, {
+    summary_for_user:
+      "当前无法读取缓存状态摘要。只有在你明确要求实时刷新时，插件才会改为 live 状态探测；如果问题持续，请检查本地 dbt-agentd 和运行时是否正常。",
+    response_hint:
+      "This is a cached-status failure. Do not silently retry with live status unless the user explicitly asked for a refresh or live check.",
+  })
+}
+
 async function getCachedStatusSummary() {
-  const cached = await tryLocalAgentJSON("/v1/status/summary", { timeoutMs: 2500 })
-  if (cached && typeof cached === "object" && !Array.isArray(cached)) {
-    return sanitizeStatusPayload(cached)
+  try {
+    return sanitizeStatusPayload(await localAgentJSON("/v1/status/summary", { timeoutMs: 2500 }))
+  } catch (summaryError) {
+    return buildCachedStatusFailurePayload(summaryError)
   }
-  return getStatusWithAutoRepair()
 }
 
 function shouldForceLiveStatus(reason) {
@@ -2702,13 +2877,11 @@ function shouldForceLiveStatus(reason) {
   if (!text) return false
   return [
     "live",
-    "fresh",
     "refresh",
     "recheck",
     "实时",
     "刷新",
     "重新检测",
-    "重新探测",
     "最新状态",
   ].some((keyword) => text.includes(keyword))
 }
@@ -2720,25 +2893,61 @@ async function getPluginStatus(options = {}) {
   return getCachedStatusSummary()
 }
 
-async function resolveConnectedBoard(explicitBoard, explicitVariant) {
+function isToolFailurePayload(payload) {
+  return !!payload && typeof payload === "object" && !Array.isArray(payload) && (payload.tool_error === true || payload.ok === false)
+}
+
+function getStatusRuntimeDevice(status) {
+  if (!status || typeof status !== "object" || Array.isArray(status)) return {}
+  const runtimeStatus = status.runtime_status && typeof status.runtime_status === "object" ? status.runtime_status : {}
+  const runtimeDevice = runtimeStatus.device && typeof runtimeStatus.device === "object" ? runtimeStatus.device : {}
+  const topLevelDevice = status.device && typeof status.device === "object" ? status.device : {}
+  return {
+    ...runtimeDevice,
+    ...topLevelDevice,
+  }
+}
+
+function statusHasConnectedDevice(status) {
+  if (!status || typeof status !== "object" || Array.isArray(status)) return false
+  const device = getStatusRuntimeDevice(status)
+  return status.connected_device === true || device.connected === true
+}
+
+function getStatusActiveDeviceID(status) {
+  return asString(status?.active_device_id || status?.device_id || getStatusRuntimeDevice(status).device_id)
+}
+
+function selectConnectedStatusDevice(status) {
+  const devices = connectedDeviceRecords(status)
+  const activeDeviceID = getStatusActiveDeviceID(status)
+  return devices.find((item) => asString(item.device_id) === activeDeviceID) || devices[0] || getStatusRuntimeDevice(status)
+}
+
+function assertStatusUsable(status, fallbackMessage) {
+  if (isToolFailurePayload(status)) {
+    throw new Error(asString(status.summary_for_user) || fallbackMessage)
+  }
+  return status
+}
+
+async function resolveConnectedBoard(explicitBoard, explicitVariant, options = {}) {
   const { board, variant } = normalizeBoardVariantInput(explicitBoard, explicitVariant)
   if (board && variant) return { board, variant }
 
-  const status = await getPluginStatus()
-  const runtimeStatus = status && typeof status === "object" && status.runtime_status && typeof status.runtime_status === "object"
-    ? status.runtime_status
-    : {}
-  const device = runtimeStatus.device && typeof runtimeStatus.device === "object" ? runtimeStatus.device : {}
-  const connected = status && typeof status === "object"
-    ? status.connected_device === true || device.connected === true
-    : false
+  const status = assertStatusUsable(
+    options.status ?? await getPluginStatus(),
+    "当前无法读取开发板状态摘要。",
+  )
+  const device = selectConnectedStatusDevice(status)
+  const connected = statusHasConnectedDevice(status) || connectedDeviceRecords(status).length > 0
   if (!connected) {
     throw new Error("No connected development board detected. Connect hardware first, or pass board and variant explicitly.")
   }
 
   const resolvedBoard = board || asString(status?.board_id) || asString(device.board_id)
   const resolvedVariant = variant || asString(status?.variant_id) || asString(device.variant_id)
-  const resolvedDeviceID = asString(status?.active_device_id || status?.device_id)
+  const resolvedDeviceID = getStatusActiveDeviceID(status)
   if (!resolvedBoard) {
     throw new Error("Connected device does not expose board_id. Pass --board explicitly.")
   }
@@ -2774,22 +2983,22 @@ async function inferSingleKnownVariant(board) {
   return ""
 }
 
-async function resolveBoardVariantIfConnected(explicitBoard, explicitVariant) {
+async function resolveBoardVariantIfConnected(explicitBoard, explicitVariant, options = {}) {
   const { board, variant } = normalizeBoardVariantInput(explicitBoard, explicitVariant)
   if (!board) return { board: "", variant: "" }
   if (variant) return { board, variant }
 
   try {
-    const status = await getPluginStatus()
-    const device = status && typeof status === "object" ? status.device : null
-    if (device && typeof device === "object" && device.connected === true) {
-      const connectedBoard = asString(device.board_id)
-      const connectedVariant = asString(device.variant_id)
+    const status = options.status ?? await getPluginStatus()
+    if (!isToolFailurePayload(status)) {
+      const device = selectConnectedStatusDevice(status)
+      const connectedBoard = normalizeBoardID(device.board_id || status.board_id)
+      const connectedVariant = normalizeVariantID(connectedBoard, device.variant_id || status.variant_id)
       if (connectedBoard === board && connectedVariant) {
         return {
           board,
           variant: connectedVariant,
-          device_id: asString(status?.active_device_id || status?.device_id),
+          device_id: getStatusActiveDeviceID(status),
         }
       }
     }
@@ -2803,7 +3012,22 @@ async function resolveBoardVariantIfConnected(explicitBoard, explicitVariant) {
 function connectedDeviceRecords(status) {
   if (!status || typeof status !== "object" || Array.isArray(status)) return []
   const devices = Array.isArray(status.devices) ? status.devices : []
-  return devices.filter((item) => item && typeof item === "object" && item.connected === true)
+  const connectedDevices = devices.filter((item) => item && typeof item === "object" && item.connected === true)
+  if (connectedDevices.length > 0) return connectedDevices
+
+  if (!statusHasConnectedDevice(status)) return []
+  const device = getStatusRuntimeDevice(status)
+  const deviceID = getStatusActiveDeviceID(status)
+  const boardID = asString(device.board_id || status.board_id)
+  const variantID = asString(device.variant_id || status.variant_id)
+  if (!deviceID && !boardID && !variantID) return []
+  return [{
+    ...device,
+    device_id: deviceID || asString(device.device_id),
+    board_id: boardID,
+    variant_id: variantID,
+    connected: true,
+  }]
 }
 
 function describeDeviceChoice(item) {
@@ -2824,6 +3048,67 @@ function sanitizeExplicitDeviceID(status, explicitDeviceID, board, variant) {
   if (board && resolvedBoard && board !== resolvedBoard && !(board === "RP2350" && isRP2350FamilyBoard(resolvedBoard))) return ""
   if (variant && resolvedVariant && variant !== resolvedVariant) return ""
   return requested
+}
+
+async function resolveConnectedReadTarget(explicitBoard, explicitVariant, explicitDeviceID, options = {}) {
+  const { board, variant } = normalizeBoardVariantInput(explicitBoard, explicitVariant)
+  const requestedDeviceID = asString(explicitDeviceID)
+  const status = assertStatusUsable(
+    options.status ?? await getPluginStatus(),
+    "当前无法读取开发板状态摘要。",
+  )
+  const devices = connectedDeviceRecords(status)
+  if (devices.length === 0) {
+    throw new Error("No connected development board detected. Connect hardware first, or pass board and variant explicitly for knowledge-only queries.")
+  }
+
+  if (requestedDeviceID) {
+    const exact = devices.find((item) => asString(item.device_id) === requestedDeviceID)
+    if (!exact) {
+      throw new Error(`Requested device_id not found among connected devices: ${requestedDeviceID}`)
+    }
+    const resolvedBoard = normalizeBoardID(exact.board_id)
+    const resolvedVariant = normalizeVariantID(resolvedBoard, exact.variant_id)
+    if (board && resolvedBoard && board !== resolvedBoard && !(board === "RP2350" && isRP2350FamilyBoard(resolvedBoard))) {
+      throw new Error(`device_id ${requestedDeviceID} belongs to ${resolvedBoard}, not ${board}`)
+    }
+    if (variant && resolvedVariant && variant !== resolvedVariant) {
+      throw new Error(`device_id ${requestedDeviceID} belongs to variant ${resolvedVariant}, not ${variant}`)
+    }
+    return {
+      board: resolvedBoard || board,
+      variant: resolvedVariant || variant,
+      device_id: requestedDeviceID,
+    }
+  }
+
+  const filtered = devices.filter((item) => {
+    const itemBoard = normalizeBoardID(item.board_id)
+    const itemVariant = normalizeVariantID(itemBoard, item.variant_id)
+    if (board && board !== "RP2350" && itemBoard !== board) return false
+    if (board === "RP2350" && !isRP2350FamilyBoard(itemBoard)) return false
+    if (variant && itemVariant !== variant) return false
+    return true
+  })
+
+  if (filtered.length === 1) {
+    const only = filtered[0]
+    const onlyBoard = normalizeBoardID(only.board_id)
+    return {
+      board: onlyBoard || board,
+      variant: normalizeVariantID(onlyBoard, only.variant_id) || variant,
+      device_id: asString(only.device_id),
+    }
+  }
+
+  const candidates = filtered.length > 0 ? filtered : devices
+  const scopeText = board
+    ? `${board}${variant ? `/${variant}` : ""}`
+    : "the current request"
+  const listed = candidates.map(describeDeviceChoice).join("; ")
+  throw new Error(
+    `Multiple connected devices match ${scopeText}. Specify device_id explicitly. Candidates: ${listed}`
+  )
 }
 
 async function resolveConnectedMutationTarget(explicitBoard, explicitVariant, explicitDeviceID) {
@@ -2924,13 +3209,51 @@ async function resolveConnectedRP2350FamilyTarget(explicitDeviceID) {
   )
 }
 
+function buildCapabilityExecutionAvailability(status, board, variant) {
+  const scopeText = `${board}${variant ? `/${variant}` : ""}`
+  if (isToolFailurePayload(status)) {
+    return {
+      connected_device: false,
+      connected_board_matches_request: false,
+      live_control_available: false,
+      note: `当前无法读取缓存状态摘要。你可以继续回答 ${scopeText} 的能力和用法问题，但不要声称已经具备实时控制、部署、烧录或运行态探测，除非用户明确要求刷新并确认设备已连接。`,
+    }
+  }
+
+  const connected = statusHasConnectedDevice(status) || connectedDeviceRecords(status).length > 0
+  const device = selectConnectedStatusDevice(status)
+  const connectedBoard = normalizeBoardID(device.board_id || status?.board_id)
+  const connectedVariant = normalizeVariantID(connectedBoard, device.variant_id || status?.variant_id)
+  const sameBoard =
+    connected &&
+    connectedBoard === board &&
+    (!variant || !connectedVariant || connectedVariant === variant)
+
+  if (sameBoard) {
+    return {
+      connected_device: true,
+      connected_board_matches_request: true,
+      live_control_available: true,
+      note: `Live control and runtime probing are available for ${scopeText}.`,
+    }
+  }
+
+  return {
+    connected_device: connected,
+    connected_board_matches_request: false,
+    live_control_available: false,
+    note: connected
+      ? `A different board is currently connected (${connectedBoard || "unknown"}${connectedVariant ? `/${connectedVariant}` : ""}). You may answer capability and usage questions for ${scopeText}, but do not claim to perform live control, deployment, flashing, or runtime probing until that board is actually connected.`
+      : `No ${scopeText} device is currently connected. You may answer capability and usage questions, but do not claim to perform live control, deployment, flashing, or runtime probing until the board is connected.`,
+  }
+}
+
 function localPublishedBoardManifestPath(board) {
   const targetBoard = asString(board)
   if (!targetBoard) return ""
   return path.join(
     homeDir(),
     "Library",
-    "Application Support",
     "development-board-toolchain",
     "agent",
     "registry",
@@ -2990,7 +3313,7 @@ async function performPluginUpdate(options = {}) {
   const explicitSource = asString(options.source)
   const manifestSource = explicitSource || resolveUpdateManifestSource()
   const repositorySource = resolveUpdateRepository()
-  const force = options.force === true || String(options.force || "").trim().toLowerCase() === "true"
+  const force = boolValueDefault(options.force, true)
 
   if (manifestSource) assertUpdateSourceAllowed(manifestSource, "update manifest")
   if (repositorySource) assertUpdateSourceAllowed(repositorySource, "update repository")
@@ -3046,6 +3369,7 @@ async function performPluginUpdate(options = {}) {
           ok: true,
           install_root: installRoot,
           toolkit_root: installRoot,
+          force,
           update_manifest_url: manifestSource,
           version: localVersion,
           stdout: String(stdout || "").trim(),
@@ -3136,6 +3460,7 @@ async function performPluginUpdate(options = {}) {
       update_available: false,
       message: `Development Board Toolchain updated to ${localVersion}`,
       toolkit_root: installRoot,
+      force,
       update_source: fallbackSource,
     })
 
@@ -3143,6 +3468,7 @@ async function performPluginUpdate(options = {}) {
       ok: true,
       install_root: installRoot,
       toolkit_root: installRoot,
+      force,
       update_source: fallbackSource,
       version: localVersion,
       stdout: String(stdout || "").trim(),
@@ -3203,15 +3529,16 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         async execute(args) {
           const normalized = normalizeBoardVariantInput(args.board, args.variant)
           const requestedLimit = Number.parseInt(asString(args.limit), 10)
+          const status = await getPluginStatus()
           let sanitizedDeviceID = ""
           try {
-            const status = await getPluginStatus()
             sanitizedDeviceID = sanitizeExplicitDeviceID(status, args.device_id, normalized.board, normalized.variant)
           } catch {}
-          const target = await resolveConnectedMutationTarget(
+          const target = await resolveConnectedReadTarget(
             normalized.board,
             normalized.variant,
             sanitizedDeviceID,
+            { status },
           )
           const payload = await localAgentTool("list_board_processes", {
             board_id: target.board || normalized.board,
@@ -3470,6 +3797,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
           profile: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
         },
         async execute(args) {
           const board = asString(args.board)
@@ -3480,6 +3808,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             board_id: resolved.board,
             variant_id: resolved.variant,
             profile: asString(args.profile),
+            build_mode: asString(args.build_mode),
           }).toString()
           return jsonText(await localAgentJSON(`/v1/environment/check?${query}`, { timeoutMs: 12000 }))
         },
@@ -3490,6 +3819,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
           profile: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
           force: tool.schema.string().optional(),
         },
         async execute(args) {
@@ -3503,6 +3833,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
               board_id: resolved.board,
               variant_id: resolved.variant,
               profile: asString(args.profile),
+              build_mode: asString(args.build_mode),
               force: boolValue(args.force),
             },
             timeoutMs: 180000,
@@ -3510,7 +3841,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_update_plugin: tool({
-        description: "Update the Development Board Toolchain standalone runtime and refresh the OpenCode plugin from the configured release manifest. Use this when the user asks to update the plugin/toolchain, or after a cached update notice says a new version is available.",
+        description: "Update the Development Board Toolchain standalone runtime and refresh the OpenCode plugin from the configured release manifest. Updates overwrite the existing OpenCode package cache by default. Use this when the user asks to update the plugin/toolchain, or after a cached update notice says a new version is available.",
         args: {
           force: tool.schema.string().optional(),
           source: tool.schema.string().optional(),
@@ -3524,17 +3855,24 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_check_plugin_update: tool({
-        description: "Check the cached Development Board Toolchain update state, and trigger a background refresh if the cache is older than one day. Prefer the configured release manifest and fall back to the legacy version source only if needed.",
+        description: "Check the cached Development Board Toolchain update state, trigger a background refresh if needed, and return compact release-manifest guidance for offline board-family packages. Prefer the configured release manifest and fall back to the legacy version source only if needed.",
         args: {},
         async execute() {
           const root = resolveToolkitRoot()
-          const state = await checkPluginUpdateNow(root)
+          const refresh = maybeStartBackgroundUpdateCheck(root)
+          const state = buildCachedPluginUpdateSnapshot(
+            root,
+            refresh && typeof refresh === "object" ? refresh.state : readUpdateState(),
+            { started: refresh && refresh.started === true },
+          )
+          const releaseManifest = await requestJSON(resolveUpdateManifestSource(), { timeoutMs: 4000 }).catch(() => null)
           return jsonText({
             toolkit_root: root,
             update_manifest_url: resolveUpdateManifestSource(),
             update_repository: resolveUpdateRepository(),
             update_version_url: resolveUpdateVersionSource(),
             state,
+            release_manifest: summarizeUpdateManifest(releaseManifest),
           })
         },
       }),
@@ -3558,6 +3896,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           device_id: tool.schema.string().optional(),
           image_source: tool.schema.string().optional(),
           scope: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
           host_image_dir: tool.schema.string().optional(),
           mode: tool.schema.string().optional(),
           dry_run: tool.schema.string().optional(),
@@ -3576,6 +3915,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           device_id: tool.schema.string().optional(),
           image_source: tool.schema.string().optional(),
           scope: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
           host_image_dir: tool.schema.string().optional(),
           mode: tool.schema.string().optional(),
           dry_run: tool.schema.string().optional(),
@@ -3632,6 +3972,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
           probe_env: tool.schema.boolean().optional(),
+          build_mode: tool.schema.string().optional(),
         },
         async execute(args) {
           const board = asString(args.board)
@@ -3642,6 +3983,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             board_id: resolved.board,
             variant_id: resolved.variant,
             probe_env: boolValue(args.probe_env),
+            build_mode: asString(args.build_mode),
           }, { timeoutMs: 12000 })
           return jsonText(summarizeBoardConfigPayload(payload, resolved.board, resolved.variant))
         },
@@ -3657,9 +3999,10 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           const board = asString(args.board)
           const capability = normalizeCapabilityAlias(args.capability)
           if (!capability) throw new Error("capability is required")
+          const status = await getPluginStatus()
           const resolved = board
-            ? await resolveBoardVariantIfConnected(board, args.variant)
-            : await resolveConnectedBoard("", args.variant)
+            ? await resolveBoardVariantIfConnected(board, args.variant, { status })
+            : await resolveConnectedBoard("", args.variant, { status })
           await assertCapabilityAvailable(resolved.board, resolved.variant, capability)
           const query = new URLSearchParams({
             board_id: resolved.board,
@@ -3668,26 +4011,11 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           }).toString()
           const local = await tryLocalAgentJSON(`/v1/context/capability?${query}`, { timeoutMs: 6000 })
           if (local) {
-            const status = await getPluginStatus()
-            const connectedBoard = asString(status.board_id)
-            const connectedVariant = asString(status.variant_id)
-            const connected = !!status.connected_device
-            const sameBoard = connected && connectedBoard === resolved.board && (!resolved.variant || !connectedVariant || connectedVariant === resolved.variant)
-            local.execution_availability = sameBoard
-              ? {
-                  connected_device: true,
-                  connected_board_matches_request: true,
-                  live_control_available: true,
-                  note: `Live control and runtime probing are available for ${resolved.board}/${resolved.variant}.`,
-                }
-              : {
-                  connected_device: connected,
-                  connected_board_matches_request: false,
-                  live_control_available: false,
-                  note: connected
-                    ? `A different board is currently connected (${connectedBoard || "unknown"}${connectedVariant ? `/${connectedVariant}` : ""}). You may answer capability and usage questions for ${resolved.board}/${resolved.variant}, but do not claim to perform live control, deployment, flashing, or runtime probing until that board is actually connected.`
-                    : `No ${resolved.board}/${resolved.variant} device is currently connected. You may answer capability and usage questions, but do not claim to perform live control, deployment, flashing, or runtime probing until the board is connected.`,
-                }
+            local.execution_availability = buildCapabilityExecutionAvailability(
+              status,
+              resolved.board,
+              resolved.variant,
+            )
             local.operator_warning = local.execution_availability.live_control_available
               ? ""
               : local.execution_availability.note
@@ -3904,6 +4232,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           language: tool.schema.string().optional(),
           binary_name: tool.schema.string().optional(),
           remote_workdir: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
           dry_run: tool.schema.string().optional(),
         },
         async execute(args) {
@@ -3925,6 +4254,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             language,
             binary_name: binaryName,
             remote_workdir: asString(args.remote_workdir),
+            build_mode: asString(args.build_mode),
             dry_run: boolValue(args.dry_run),
           }, { timeoutMs: 180000 })
           return jsonText(summarizeBuildRunPayload(result))
@@ -4163,7 +4493,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       }
       if (input.toolID === "dbt_current_board_status") {
         output.description =
-          "Use this for live board status, connection state, execution precheck, USB ECM, RP2350 single-USB state, SSH, or control-service questions. It already includes connected devices and the active device. If it returns ok=false or tool_error=true, explain summary_for_user directly to the user."
+          "Use this for live board status, connection state, execution precheck, USB ECM, RP2350 single-USB state, SSH, or control-service questions. It already includes connected devices and the active device. For simple status-only prompts, use summary_for_user as the compact status anchor, then answer naturally from the returned fields according to the user's wording. If it returns ok=false or tool_error=true, explain the failure fields directly to the user."
       }
       if (input.toolID === "dbt_list_connected_devices") {
         output.description =
@@ -4279,7 +4609,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           "For long real image flashing, prefer dbtflashstart with arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}, return the job_id, then call dbtjobstatus with that job_id to show current progress. Use dbtflashimage with {\"dry_run\":\"true\"} for validation without real flashing.",
         )
         output.system.push(
-          "Do not run dbtctl, dbtctl --help, host bash flashing commands, or source-checkout DBT-Agent-Project/docker-project binaries for board operations. The local dbt-agentd runtime owns status, mode detection, flashing, probes, and tool events.",
+          "Do not run dbtctl, dbtctl --help, host bash flashing commands, or source-checkout binaries for board operations. The local dbt-agentd runtime owns status, mode detection, flashing, probes, and tool events.",
         )
         return
       }
@@ -4367,13 +4697,19 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "If the user asks to run, execute, deploy, burn, or flash something on the connected board, do not stop after drafting code or explaining the plan. Continue to the DBT execution tool that performs the action unless preflight or live availability blocks it.",
       )
       output.system.push(
-        "For TaishanPi initialization-image burning or full-board image flashing, use dbt_start_flash_image with image_source=factory and scope=all for long real flashing so progress can be polled with dbt_get_job_status. Use dbt_flash_image only for blocking dry-run or when the user explicitly wants to wait for completion in one tool call. Do not call dbtctl --help, do not execute dbtctl through host bash, and do not use DBT-Agent-Project or docker-project development paths for board operations.",
+        "For TaishanPi initialization-image burning or full-board image flashing, use dbt_start_flash_image with image_source=factory and scope=all for long real flashing so progress can be polled with dbt_get_job_status. Use dbt_flash_image only for blocking dry-run or when the user explicitly wants to wait for completion in one tool call. Do not call dbtctl --help, do not execute dbtctl through host bash, and do not use source-checkout development paths for board operations.",
       )
       output.system.push(
-        "The OpenCode plugin is an installed-runtime client. Board control, flashing, status, and probes must go through local dbt-agentd and files under ~/Library/Application Support/development-board-toolchain, not source checkout paths.",
+        "The OpenCode plugin is an installed-runtime client. Board control, flashing, status, and probes must go through local dbt-agentd and files under ~/Library/development-board-toolchain, not source checkout paths.",
       )
       output.system.push(
         "For run or execute requests, do not end with a raw source code block unless the user explicitly asked for code only. If live execution is available, continue to dbt_build_run_program.",
+      )
+      output.system.push(
+        "For TaishanPi build or environment work, use dbt_get_board_config with probe_env=true. If both docker and local-llvm are available and the user has not chosen, ask which compile mode to use. Pass build_mode=docker for Linux GCC and build_mode=local-llvm for Mac LLVM to environment install/check and dbt_build_run_program.",
+      )
+      output.system.push(
+        "For TaishanPi custom image flashing or generated-image work, keep the same compile mode: pass build_mode=docker for Linux GCC images or build_mode=local-llvm for Mac LLVM images to dbt_flash_image/dbt_start_flash_image unless host_image_dir is explicitly provided.",
       )
       output.system.push(
         "If dbt_build_run_program returns ok=false, do not stop silently. Summarize the failure from summary or stderr_excerpt, and only propose a fix if the error is clear.",

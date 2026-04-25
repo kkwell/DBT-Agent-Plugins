@@ -1,11 +1,13 @@
 {
   "mcpServers": {
     "dbt-agent": {
-      "command": "dbt-agentd",
+      "command": "/bin/sh",
       "args": [
-        "--mcp-serve"
+        "-lc",
+        "exec \"$HOME/Library/development-board-toolchain/runtime/editor_plugins/codex/bin/dbt-agent-mcp-bridge\" --config \"$HOME/Library/development-board-toolchain/agent/config/dbt-agentd.local.json\" --toolkit-root \"$HOME/Library/development-board-toolchain/runtime\" --agent-root \"$HOME/Library/development-board-toolchain/agent\" --idle-timeout-seconds 0"
       ],
       "cwd": ".",
+      "default_tools_approval_mode": "auto",
       "env": {
         "DBT_TELEMETRY_SOURCE": "codex_plugin",
         "DBT_CLIENT_KIND": "codex_plugin"

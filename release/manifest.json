@@ -1,18 +1,27 @@
 {
   "name": "DBT-Agent-Plugins",
-  "version": "1.0.6",
+  "version": "1.0.11",
+  "protocol_version": 1,
   "release_entry": "release/install.sh",
   "github_releases": "https://github.com/kkwell/DBT-Agent-Plugins/releases",
+  "core_update_manifest": "opencode-plugin-release-manifest.json",
+  "release_policy": {
+    "plugin_repository": "https://github.com/kkwell/DBT-Agent-Plugins.git",
+    "gui_repository": "https://github.com/kkwell/development-board-toolchain-gui",
+    "gui_required_for_core_functions": false,
+    "runtime_distribution": "offline",
+    "board_environment_distribution": "offline_manual_per_family"
+  },
   "release_assets": {
     "opencode": {
-      "root_dir": "DBT-Agent-OpenCode-v1.0.6",
-      "zip": "DBT-Agent-OpenCode-v1.0.6.zip",
-      "tar_gz": "DBT-Agent-OpenCode-v1.0.6.tar.gz"
+      "root_dir": "DBT-Agent-OpenCode-v1.0.11",
+      "zip": "DBT-Agent-OpenCode-v1.0.11.zip",
+      "tar_gz": "DBT-Agent-OpenCode-v1.0.11.tar.gz"
     },
     "codex": {
-      "root_dir": "DBT-Agent-Codex-v1.0.6",
-      "zip": "DBT-Agent-Codex-v1.0.6.zip",
-      "tar_gz": "DBT-Agent-Codex-v1.0.6.tar.gz"
+      "root_dir": "DBT-Agent-Codex-v1.0.11",
+      "zip": "DBT-Agent-Codex-v1.0.11.zip",
+      "tar_gz": "DBT-Agent-Codex-v1.0.11.tar.gz"
     }
   },
   "platforms": {
@@ -25,6 +34,19 @@
       "installer": "release/install-codex.sh",
       "docs": "codex_plugin/docs/installation.md",
       "manifest": "codex_plugin/release/manifest.json"
+    }
+  },
+  "board_offline_packages": {
+    "policy": "Large board-family development environments are published separately. DBT tools should check the installed environment first and prompt the user to manually download/install the missing family package before model-driven build work continues.",
+    "families": {
+      "TaishanPi": {
+        "boards": ["TaishanPi"],
+        "package_id": "TaishanPi"
+      },
+      "RP2350": {
+        "boards": ["ColorEasyPICO2", "RaspberryPiPico2W"],
+        "package_id": "RP2350"
+      }
     }
   }
 }

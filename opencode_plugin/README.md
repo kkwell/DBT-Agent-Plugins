@@ -41,11 +41,11 @@ This plugin does not embed a local runtime copy.
 
 It always uses the shared runtime installed at:
 
-- `~/Library/Application Support/development-board-toolchain/runtime`
+- `~/Library/development-board-toolchain/runtime`
 - and the shared local backend agent at:
-- `~/Library/Application Support/development-board-toolchain/agent`
+- `~/Library/development-board-toolchain/agent`
 - board-family assets are resolved from:
-  - `~/Library/Application Support/development-board-toolchain/families/`
+  - `~/Library/development-board-toolchain/families/`
 
 The packaged OpenCode module is structured so OpenCode can install it by npm-style module name,
 following the same packaging model used by projects such as `oh-my-openagent`.
@@ -57,9 +57,9 @@ That means:
 - a package `postinstall` step writes `development-board-toolchain.runtime.json` beside the module
 
 The standalone installer remains available as a local fallback. It now installs the package in module
-cache layout under `~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent`, stages the
-local tarball under `~/.config/opencode/vendor/dbt-agent`, and updates `opencode.json` to use the
-module name instead of a file path.
+cache layout under `~/.cache/opencode/packages/dbt-agent@latest/node_modules/dbt-agent`, keeps
+`opencode.json` on the package name `dbt-agent`, and removes old local `file:` / `./plugins/...`
+entries instead of leaving a second plugin source behind.
 
 All board operations must go through the shared local `dbt-agentd` HTTP API. The plugin must not run
 source-checkout tools, query `dbtctl --help`, or call binaries under `DBT-Agent-Project` /
@@ -101,6 +101,13 @@ The installed plugin now resolves update metadata from the `DBT-Agent-Plugins` d
 
 After a newer version is pushed to that repository, OpenCode can use `dbt_check_plugin_update` and
 `dbt_update_plugin` to refresh the installed OpenCode package from the repository release source.
+The update tool replaces the existing OpenCode package cache by default because an in-place update
+without `--force` fails when `~/.cache/opencode/packages/dbt-agent@latest` already exists.
+
+Board-family development environments are intentionally separate offline packages. The plugin and
+local runtime should check environment readiness, then ask the user to install the missing family
+package before model-driven build work continues. A TaishanPi-only install does not imply RP2350
+firmware-build readiness, and an RP2350-only install does not imply TaishanPi build readiness.
 
 By default the OpenCode tool surface is kept Gemini-safe: it exposes no-underscore alias tools such as
 `dbtstatus`, `dbtflashimage`, `dbtflashstart`, `dbtjobstatus`, `dbtenvcheck`, `dbtboardconfig`, `dbtcapabilities`,
