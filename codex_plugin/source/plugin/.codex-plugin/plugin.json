@@ -1,6 +1,6 @@
 {
   "name": "dbt-agent",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Codex plugin for DBT-Agent, the Codex-facing Development Board Toolchain integration backed by the shared macOS runtime and dbt-agentd.",
   "author": {
     "name": "Kvell",

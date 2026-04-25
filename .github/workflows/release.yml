@@ -1,0 +1,34 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  plugin-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare scripts
+        run: chmod +x scripts/*.sh codex_plugin/scripts/*.sh opencode_plugin/scripts/*.sh
+
+      - name: Verify release metadata
+        run: ./scripts/verify_release_ready.sh
+
+      - name: Build release archives
+        run: ./scripts/build_release_archives.sh
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DBT-Agent-*.zip
+            dist/DBT-Agent-*.tar.gz
+            dist/SHA256SUMS.txt
+            dist/RELEASE_NOTES_v*.md
