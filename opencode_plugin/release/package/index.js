@@ -2321,6 +2321,7 @@ function reviewSourceFile(language, source, capability, binaryName) {
   const ext = normalized === "c++" || normalized === "cpp" || normalized === "cxx" ? "cpp" : "c"
   const cwd = process.cwd()
   const base = sanitizeArtifactBaseName(binaryName || `${capability || "dbt"}_generated`)
+  mkdirSync(cwd, { recursive: true })
   const file = path.join(cwd, `${base}.${ext}`)
   writeFileSync(file, normalizeCStringLiteralNewlines(source, language), "utf8")
   return { file, base, cwd }
@@ -4224,7 +4225,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_apply_effect: tool({
-        description: "Plan and apply a natural-language board effect through the installed DBT runtime. For TaishanPi rgb_led simple color, off, heartbeat, or timer requests, use this instead of dbt_build_run_program; the runtime uses direct sysfs when that is lossless and generated C only for complex timing or patterns.",
+        description: "Plan and apply a natural-language board effect through the installed DBT runtime. For TaishanPi rgb_led effects, including simple colors, off, heartbeat, timer blink, breath, repeat counts, and multi-color sequences, use this instead of dbt_build_run_program; the runtime owns direct sysfs versus generated C and writes generated artifacts under the current workspace when compilation is needed.",
         args: {
           request: tool.schema.string(),
           capability: tool.schema.string().optional(),
@@ -4245,13 +4246,14 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             device_id: asString(args.device_id) || target.device_id,
             capability,
             request,
+            workspace: process.cwd(),
             dry_run: boolValue(args.dry_run),
           }, { timeoutMs: 180000 })
           return jsonText(result)
         },
       }),
       dbt_build_run_program: tool({
-        description: "Compile, upload, and run generated C/C++ source for a selected board capability. Normal flow: status -> prepare_request -> capability_summaries -> chosen capability context -> board config -> build_run_program. Do not invent hidden helper APIs.",
+        description: "Compile, upload, and run generated C/C++ source for a selected Linux-board capability. Source and local build artifacts are created under the current workspace. For TaishanPi, omit build_mode or use auto unless the user explicitly selected a compile mode; the runtime probes the running board rootfs/sysroot ABI and rejects incompatible docker/local-llvm choices.",
         args: {
           capability: tool.schema.string(),
           source: tool.schema.string(),
@@ -4282,6 +4284,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             source_file: local.file,
             language,
             binary_name: binaryName,
+            workspace: local.cwd,
             remote_workdir: asString(args.remote_workdir),
             build_mode: asString(args.build_mode),
             dry_run: boolValue(args.dry_run),
@@ -4461,7 +4464,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtconnectwifi", "dbt_connect_wifi", "Connect the board to WiFi."],
     ["dbtwifiscan", "dbt_scan_wifi_networks", "Scan nearby WiFi networks."],
     ["dbtbluetoothscan", "dbt_scan_bluetooth_devices", "Scan nearby Bluetooth devices."],
-    ["dbtapplyeffect", "dbt_apply_effect", "Plan and apply a board effect. Use this for TaishanPi rgb_led simple colors, off, heartbeat, and timer effects."],
+    ["dbtapplyeffect", "dbt_apply_effect", "Plan and apply a board effect. Use this for TaishanPi rgb_led effects, including simple colors and multi-color sequences."],
     ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
@@ -4633,7 +4636,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       const aliasOnly = visibleToolNames.length > 0 && visibleToolNames.every((name) => aliasToolNames.has(name))
       if (aliasOnly) {
         output.system.push(
-          "For Development Board Toolchain requests, call the DBT alias tools. Use dbtstatus for current board status, dbtflashimage for blocking dry-run or short TaishanPi factory/custom image flashing, dbtflashstart plus dbtjobstatus for long real flashing progress, dbtenvcheck for preflight, dbtboardconfig for config, dbtcapabilities or dbtcapabilitycontext for knowledge, dbtapplyeffect for simple TaishanPi rgb_led effects, dbtprocesses for Linux-board process lists, and dbtchipprobe/dbtcpufrequency/dbtddrfrequency/dbtcputemperature/dbtwirelessprobe/dbtwifiscan/dbtbluetoothscan for live probes.",
+          "For Development Board Toolchain requests, call the DBT alias tools. Use dbtstatus for current board status, dbtflashimage for blocking dry-run or short TaishanPi factory/custom image flashing, dbtflashstart plus dbtjobstatus for long real flashing progress, dbtenvcheck for preflight, dbtboardconfig for config, dbtcapabilities or dbtcapabilitycontext for knowledge, dbtapplyeffect for TaishanPi rgb_led effects including multi-color sequences, dbtprocesses for Linux-board process lists, and dbtchipprobe/dbtcpufrequency/dbtddrfrequency/dbtcputemperature/dbtwirelessprobe/dbtwifiscan/dbtbluetoothscan for live probes.",
         )
         output.system.push(
           "For long real image flashing, prefer dbtflashstart with arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}, return the job_id, then call dbtjobstatus with that job_id to show current progress. Use dbtflashimage with {\"dry_run\":\"true\"} for validation without real flashing.",
@@ -4644,7 +4647,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         return
       }
       output.system.push(
-        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect for simple TaishanPi rgb_led effects, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and pass extra arguments as JSON in arguments_json.",
+        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect for TaishanPi rgb_led effects including multi-color sequences, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and pass extra arguments as JSON in arguments_json.",
       )
       output.system.push(
         "For live board status, connection, USB ECM, SSH, control-service, or execution-precheck questions, call dbttool with action=status first and answer from that result.",
@@ -4736,10 +4739,11 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "For run or execute requests, do not end with a raw source code block unless the user explicitly asked for code only. If live execution is available, continue to dbt_build_run_program.",
       )
       output.system.push(
-        "For TaishanPi rgb_led requests that only set a color, turn the LED off, use heartbeat, or use a simple timer blink, call dbt_apply_effect/dbttool action=apply-effect instead of generating C. Use dbt_build_run_program only when the requested LED behavior needs precise timing, repeat counts, multi-step sequences, breath, fade, or another custom loop.",
+        "For TaishanPi rgb_led natural-language effects, including color/off/heartbeat/timer blink, precise timing, repeat counts, multi-step sequences, breath, fade, and traffic-light style red/yellow/green cycling, call dbt_apply_effect/dbttool action=apply-effect instead of generating C. Do not fall back to dbt_build_run_program unless the user is explicitly asking to write and run a custom program outside the LED effect contract.",
       )
       output.system.push(
-        "For TaishanPi build or environment work, use dbt_get_board_config with probe_env=true. If both docker and local-llvm are available and the user has not chosen, ask which compile mode to use. Pass build_mode=docker for Linux GCC and build_mode=local-llvm for Mac LLVM to environment install/check and dbt_build_run_program.",
+        "For TaishanPi build or environment work, use dbt_get_board_config with probe_env=true. For generated program build/run, prefer build_mode auto or omit build_mode so the runtime can probe the running board rootfs/sysroot ABI and choose docker or local-llvm before compiling. Do not infer the application compiler from the kernel compiler string alone. Pass an explicit build_mode only when the user selected a mode, when checking/installing that specific environment, or when flashing/downloading that specific image family.",
+        "For any code-generation build/run flow, write generated source and local build artifacts under the current workspace, not a fixed temp path or private source-checkout directory.",
       )
       output.system.push(
         "For TaishanPi custom image flashing or generated-image work, keep the same compile mode: pass build_mode=docker for Linux GCC images or build_mode=local-llvm for Mac LLVM images to dbt_flash_image/dbt_start_flash_image unless host_image_dir is explicitly provided.",

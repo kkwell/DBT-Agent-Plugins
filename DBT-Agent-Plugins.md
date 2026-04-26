@@ -264,6 +264,7 @@ codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s
 
 Normal board operations must resolve to the installed runtime under `~/Library/development-board-toolchain/`, not to source-checkout binaries.
 For user-facing questions such as “当前开发板有什么功能和特点”, “开发板有什么能力”, “当前开发板有什么能力”, and “这个开发板支持什么功能”, Codex should resolve the board if needed, call `dbt_list_capability_summaries`, and answer from DBT tool results and installed capability data, not from source-checkout docs. If a tool result contains a host path that is not needed for the answer, omit it; if a path must be shown, keep it under `~/Library/development-board-toolchain`.
+For pin-header questions such as 40PIN, GPIO, PWM, UART, I2C, SPI, or pinmux, Codex follows the same rule: use DBT tools first, then installed published knowledge under `~/Library/development-board-toolchain/agent/{vault,registry}/published` only. Treat `pin_header_40pin` as reference-only; it can explain physical pin mapping and default mux labels, but runnable code/control answers require a published execution capability plus live board runtime evidence.
 
 ## Codex maintenance rule
 
