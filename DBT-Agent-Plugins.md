@@ -263,7 +263,7 @@ codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s
 ```
 
 Normal board operations must resolve to the installed runtime under `~/Library/development-board-toolchain/`, not to source-checkout binaries.
-For user-facing questions such as “当前开发板有什么功能和特点”, Codex should answer from DBT tool results and installed capability data, not from source-checkout docs. If a tool result contains a host path that is not needed for the answer, omit it; if a path must be shown, keep it under `~/Library/development-board-toolchain`.
+For user-facing questions such as “当前开发板有什么功能和特点”, “开发板有什么能力”, “当前开发板有什么能力”, and “这个开发板支持什么功能”, Codex should resolve the board if needed, call `dbt_list_capability_summaries`, and answer from DBT tool results and installed capability data, not from source-checkout docs. If a tool result contains a host path that is not needed for the answer, omit it; if a path must be shown, keep it under `~/Library/development-board-toolchain`.
 
 ## Codex maintenance rule
 

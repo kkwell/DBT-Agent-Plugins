@@ -12,6 +12,7 @@ description: Use for ColorEasyPICO2 and RaspberryPiPico2W work through DBT tools
 - Keep the last confirmed RP2350 board and variant sticky within the current conversation. If a previous turn already established `ColorEasyPICO2` or `RaspberryPiPico2W`, keep using that scope until the user says the hardware changed.
 - If capability summaries or full capability context were already fetched earlier in the conversation, do not call `dbt_get_capability_context` again to re-prove that the board supports that feature. Reuse the earlier result and only fetch again when the implementation contract is missing.
 - If board config was already fetched for the same RP2350 board in the current conversation, reuse it instead of calling `dbt_get_board_config` again.
+- For broad capability or feature prompts such as `开发板有什么能力`, `当前开发板有什么能力`, `这个开发板支持什么功能`, or `what can this board do`, use `dbt_list_capability_summaries` for the confirmed RP2350 board and variant. Do not use `Search`, `Read`, `rg`, repository docs, GUI docs, `DBT-Agent-Project.md`, or local handoff files for user-facing answers.
 - For BOOTSEL transitions, use `dbt_rp2350_enter_bootsel`, `dbt_rp2350_flash`, `dbt_rp2350_verify`, and `dbt_rp2350_run`.
 - For firmware generation, use `dbt_get_capability_context` and `dbt_get_board_config` first, then `dbt_rp2350_build_flash_source`.
 - For log inspection, use `dbt_rp2350_tail_logs`.

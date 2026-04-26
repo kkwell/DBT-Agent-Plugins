@@ -3,4 +3,5 @@ interface:
   short_description: "RP2350 board flash, serial, and firmware workflows"
   icon_small: "./assets/app-logo.png"
   icon_large: "./assets/app-logo.png"
-  default_prompt: "Use DBT-Agent RP2350 for ColorEasyPICO2 and Raspberry Pi Pico 2 W BOOTSEL, flash, verify, serial, and firmware tasks."
+  default_prompt: >-
+    Use DBT-Agent RP2350 for ColorEasyPICO2 and Raspberry Pi Pico 2 W BOOTSEL, flash, verify, serial, and firmware tasks. For questions such as `开发板有什么能力`, `当前开发板有什么能力`, `这个开发板支持什么功能`, or `what can this board do`, answer from `dbt_list_capability_summaries` plus DBT status/config data only; do not read or cite repository docs, GUI docs, `DBT-Agent-Project.md`, local handoff files, or private source-checkout paths.

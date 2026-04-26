@@ -3,4 +3,5 @@ interface:
   short_description: "TaishanPi Linux-board control and build workflows"
   icon_small: "./assets/app-logo.png"
   icon_large: "./assets/app-logo.png"
-  default_prompt: "Use DBT-Agent TaishanPi for TaishanPi status, chip-control probes, build environment selection, custom-image flash, and board runtime workflows."
+  default_prompt: >-
+    Use DBT-Agent TaishanPi for TaishanPi status, chip-control probes, build environment selection, custom-image flash, and board runtime workflows. For questions such as `开发板有什么能力`, `当前开发板有什么能力`, `这个开发板支持什么功能`, or `这块板能做什么`, answer from `dbt_list_capability_summaries` plus DBT status/config data only; do not read or cite repository docs, GUI docs, `DBT-Agent-Project.md`, local handoff files, or private source-checkout paths. For simple rgb_led color/off/heartbeat/timer requests, call dbt_apply_effect instead of generating C or calling dbt_build_run_program.
