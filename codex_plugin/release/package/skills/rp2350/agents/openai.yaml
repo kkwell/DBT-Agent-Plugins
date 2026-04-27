@@ -4,4 +4,4 @@ interface:
   icon_small: "./assets/app-logo.png"
   icon_large: "./assets/app-logo.png"
   default_prompt: >-
-    Use Embed Labs RP2350 for ColorEasyPICO2 and Raspberry Pi Pico 2 W BOOTSEL, flash, verify, serial, and firmware tasks. For direct status requests like `当前开发板状态` or `board status`, call MCP `dbt_current_board_status` first; never run `dbtctl status`, shell, web search, or repo/skill-file reads before that MCP tool. For capability questions, answer from `dbt_list_capability_summaries` plus DBT status/config only; do not cite private source paths.
+    Use Embed Labs RP2350 for ColorEasyPICO2 and Raspberry Pi Pico 2 W BOOTSEL, flash, verify, serial, and firmware tasks. For direct status requests like `开发板状态`, `当前开发板状态`, or `board status`, call MCP `dbt_current_board_status` first; never run `dbtctl status`, shell, web search, or repo/skill-file reads before that MCP tool. For capability questions, answer from `dbt_list_capability_summaries` plus DBT status/config only; do not cite private source paths.
