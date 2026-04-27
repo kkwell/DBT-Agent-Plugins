@@ -17,7 +17,8 @@ Supported families:
 
 ## Rules
 
-- For direct live-board requests such as `当前开发板状态`, `board status`, `what board is connected`, or `which device is active`, call `dbt_current_board_status` immediately as the first action.
+- For direct live-board requests such as `当前开发板状态`, `board status`, `what board is connected`, or `which device is active`, call the MCP tool `dbt_current_board_status` immediately as the first action.
+- Do not run `dbtctl status`, shell commands, web search, workspace probes, or repository/skill-file reads before `dbt_current_board_status` when that MCP tool is available.
 - For simple status-only prompts, do not narrate the plan. Use `summary_for_user` as the compact status anchor, then answer naturally from the returned fields according to what the user asked; do not dump every field unless details are requested.
 - Do not run shell workspace probes such as `pwd`, `ls`, `find`, or `rg`, and do not read repository files before `dbt_current_board_status` unless the user is explicitly asking about plugin source, installation, or repository maintenance.
 - For broad capability or feature prompts such as `开发板有什么能力`, `当前开发板有什么能力`, `这个开发板支持什么功能`, `这块板能做什么`, or `what can this board do`, do not use `Search`, `Read`, `rg`, `find`, `ls`, repository docs, GUI docs, `DBT-Agent-Project.md`, or local handoff files. If the current board or variant is unknown, first call `dbt_current_board_status`; then call `dbt_list_capability_summaries` for that board and variant and answer from the returned capability summaries.

@@ -7,7 +7,8 @@ description: Use for ColorEasyPICO2 and RaspberryPiPico2W work through DBT tools
 
 ## Rules
 
-- For live RP2350 state, use `dbt_current_board_status` by default. Use `dbt_rp2350_detect` only when you specifically need the RP2350 runtime/BOOTSEL detection view.
+- For live RP2350 state, use the MCP tool `dbt_current_board_status` by default. Use `dbt_rp2350_detect` only when you specifically need the RP2350 runtime/BOOTSEL detection view.
+- For direct live-board status requests such as `当前开发板状态`, call `dbt_current_board_status` immediately as the first action; do not run `dbtctl status`, shell commands, web search, workspace probes, or repository/skill-file reads before that MCP tool.
 - If the board is already identified and the task is capability lookup or code generation, use `dbt_get_capability_context` and `dbt_get_board_config` directly instead of re-checking status first.
 - Keep the last confirmed RP2350 board and variant sticky within the current conversation. If a previous turn already established `ColorEasyPICO2` or `RaspberryPiPico2W`, keep using that scope until the user says the hardware changed.
 - If capability summaries or full capability context were already fetched earlier in the conversation, do not call `dbt_get_capability_context` again to re-prove that the board supports that feature. Reuse the earlier result and only fetch again when the implementation contract is missing.

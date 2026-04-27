@@ -8,6 +8,7 @@ description: Use for TaishanPi Linux-board work through DBT tools, including 1M-
 ## Rules
 
 - If the board is already identified and the task is capability lookup or code generation, use `dbt_get_capability_context` and `dbt_get_board_config` directly instead of re-checking status first.
+- For direct live-board status requests such as `当前开发板状态`, call the MCP tool `dbt_current_board_status` immediately as the first action; do not run `dbtctl status`, shell commands, web search, workspace probes, or repository/skill-file reads before that MCP tool.
 - Keep the last confirmed TaishanPi board, variant, and fetched capability context sticky within the current conversation. Reuse them for follow-up turns unless the user says the hardware changed or asks for a fresh live check.
 - If capability summaries or capability context were already fetched earlier in the conversation, do not re-call `dbt_get_capability_context` just to confirm support.
 - If board config was already fetched for the same board and variant in the current conversation, reuse it instead of calling `dbt_get_board_config` again.
