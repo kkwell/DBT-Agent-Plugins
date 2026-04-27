@@ -3305,8 +3305,8 @@ async function appendUpdateNoticeIfNeeded(payload, toolkitRoot) {
 }
 
 export const pluginInfo = {
-  name: "DBT-Agent",
-  displayName: "DBT-Agent",
+  name: "Embed Labs",
+  displayName: "Embed Labs",
   description: "development-board-toolchain board control, capability planning, flashing, and environment tooling for OpenCode.",
 }
 
@@ -4800,13 +4800,13 @@ export const DevelopmentBoardToolchainPlugin = async () => {
   }
 }
 
-DevelopmentBoardToolchainPlugin.id = "DBT-Agent"
-DevelopmentBoardToolchainPlugin.displayName = "DBT-Agent"
+DevelopmentBoardToolchainPlugin.id = "Embed Labs"
+DevelopmentBoardToolchainPlugin.displayName = "Embed Labs"
 DevelopmentBoardToolchainPlugin.pluginInfo = pluginInfo
 
 export default {
-  id: "DBT-Agent",
-  displayName: "DBT-Agent",
+  id: "Embed Labs",
+  displayName: "Embed Labs",
   description: "development-board-toolchain board control, capability planning, flashing, and environment tooling for OpenCode.",
   server: DevelopmentBoardToolchainPlugin,
 }

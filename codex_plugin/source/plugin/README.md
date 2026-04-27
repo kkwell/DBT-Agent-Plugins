@@ -1,4 +1,4 @@
-# DBT-Agent Codex Plugin
+# Embed Labs Codex Plugin
 
 This file describes the plugin payload itself.
 
@@ -8,7 +8,7 @@ For the full self-contained Codex plugin project, start from:
 
 Codex local plugin for the shared Development Board Toolchain runtime.
 
-`DBT` is the short form of `Development Board Toolchain`. `DBT-Agent` is the Codex-facing plugin name.
+`DBT` is the short form of `Development Board Toolchain`. `Embed Labs` is the Codex-facing plugin display name.
 
 ## Canonical model
 

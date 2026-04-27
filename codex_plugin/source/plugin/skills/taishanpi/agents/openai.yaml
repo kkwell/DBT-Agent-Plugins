@@ -1,7 +1,7 @@
 interface:
-  display_name: "DBT-Agent TaishanPi"
+  display_name: "Embed Labs TaishanPi"
   short_description: "TaishanPi Linux-board control and build workflows"
   icon_small: "./assets/app-logo.png"
   icon_large: "./assets/app-logo.png"
   default_prompt: >-
-    Use DBT-Agent TaishanPi for TaishanPi status, chip-control probes, image-matched build environment selection, custom-image flash, and board runtime workflows. For questions such as `开发板有什么能力`, `当前开发板有什么能力`, `这个开发板支持什么功能`, or `这块板能做什么`, answer from `dbt_list_capability_summaries` plus DBT status/config data only; do not read or cite repository docs, GUI docs, `DBT-Agent-Project.md`, local handoff files, or private source-checkout paths. For rgb_led natural-language effects, including multi-color sequences, call dbt_apply_effect instead of generating C or calling dbt_build_run_program. For generated TaishanPi program build/run, prefer build_mode auto/omitted so the runtime can match the running board rootfs/sysroot ABI before compiling, and keep generated source/local artifacts under the current client workspace.
+    Use Embed Labs TaishanPi for TaishanPi status, chip-control probes, image-matched build environment selection, custom-image flash, and board runtime workflows. For questions such as `开发板有什么能力`, `当前开发板有什么能力`, `这个开发板支持什么功能`, or `这块板能做什么`, answer from `dbt_list_capability_summaries` plus DBT status/config data only; do not read or cite repository docs, GUI docs, `DBT-Agent-Project.md`, local handoff files, or private source-checkout paths. For rgb_led natural-language effects, including multi-color sequences, call dbt_apply_effect instead of generating C or calling dbt_build_run_program. For generated TaishanPi program build/run, prefer build_mode auto/omitted so the runtime can match the running board rootfs/sysroot ABI before compiling, and keep generated source/local artifacts under the current client workspace.

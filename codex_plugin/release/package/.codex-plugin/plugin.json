@@ -1,7 +1,7 @@
 {
   "name": "dbt-agent",
-  "version": "1.0.12",
-  "description": "Codex plugin for DBT-Agent, the Codex-facing Development Board Toolchain integration backed by the shared macOS runtime and dbt-agentd.",
+  "version": "1.0.13",
+  "description": "Codex plugin for Embed Labs, the Codex-facing Development Board Toolchain integration backed by the shared macOS runtime and dbt-agentd.",
   "author": {
     "name": "Kvell",
     "email": "support@example.invalid",
@@ -19,9 +19,9 @@
   ],
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "DBT-Agent",
+    "displayName": "Embed Labs",
     "shortDescription": "TaishanPi and RP2350-family board control for Codex",
-    "longDescription": "DBT-Agent is the Codex-facing name for Development Board Toolchain. It exposes compact board-control, build, flash, and capability tools through the shared macOS runtime and local dbt-agentd, covering TaishanPi, ColorEasyPICO2, and Raspberry Pi Pico 2 W.",
+    "longDescription": "Embed Labs is the Codex-facing name for Development Board Toolchain. It exposes compact board-control, build, flash, and capability tools through the shared macOS runtime and local dbt-agentd, covering TaishanPi, ColorEasyPICO2, and Raspberry Pi Pico 2 W.",
     "developerName": "Kvell",
     "category": "Developer Tools",
     "capabilities": [

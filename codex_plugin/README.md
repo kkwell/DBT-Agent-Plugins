@@ -1,6 +1,6 @@
 # Codex Plugin Project
 
-This directory is the self-contained source-of-truth project for the DBT-Agent Codex plugin.
+This directory is the self-contained source-of-truth project for the Embed Labs Codex plugin.
 
 Everything required to maintain the Codex plugin lives under this directory:
 
@@ -32,14 +32,14 @@ When `source/plugin/` or `source/marketplace.json` changes, sync the release ass
 ## Plugin identity
 
 - Plugin id: `dbt-agent`
-- Plugin display name: `DBT-Agent`
+- Plugin display name: `Embed Labs`
 - Full product name in descriptions: `Development Board Toolchain`
 - Developer: `Kvell`
 - Website: `https://kong-cn.com/`
 
-`DBT` is the short form of `Development Board Toolchain`. `DBT-Agent` is the Codex-facing plugin name.
+`DBT` is the short form of `Development Board Toolchain`. `Embed Labs` is the Codex-facing plugin display name.
 
-On current Codex, DBT-Agent is installed as one plugin inside Codex's generic
+On current Codex, Embed Labs is installed as one plugin inside Codex's generic
 local `plugins` marketplace. The marketplace entry lives at
 `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`, keeps
 `name=plugins`, and points to `./plugins/dbt-agent`.
@@ -51,7 +51,7 @@ home-local `~/.agents/plugins/marketplace.json` marketplace with
 Do not restore the old long marketplace name
 `local-development-board-marketplace`; it truncates poorly in the Codex plugin
 directory UI. Do not rename Codex's generic `plugins` marketplace to
-DBT-Agent, because that creates a separate DBT-Agent category and can label
+Embed Labs, because that creates a separate product-specific category and can label
 unrelated plugins incorrectly.
 
 ## Runtime relationship
@@ -89,7 +89,7 @@ codex mcp list
 Check the current board through Codex CLI:
 
 ```bash
-codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 DBT-Agent 查看当前开发板状态，只调用 dbt_current_board_status。'
+codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 Embed Labs 查看当前开发板状态，只调用 dbt_current_board_status。'
 ```
 
 The `-C` path above is maintainer-only. End-user plugin guidance and model answers must not cite this source checkout path; normal board operations use the installed runtime under `~/Library/development-board-toolchain`.
@@ -97,7 +97,7 @@ The `-C` path above is maintainer-only. End-user plugin guidance and model answe
 Switch a connected TaishanPi to Loader mode through Codex CLI:
 
 ```bash
-codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 DBT-Agent 将当前 TaishanPi 切换到 Loader 模式。直接调用 dbt_reboot_loader，不要查 capability，不要运行 shell。完成后调用 dbt_current_board_status 确认 USB mode。'
+codex exec -C /Users/kvell/kk-project/DBT-Agent-Project --skip-git-repo-check -s danger-full-access -m gpt-5.4-mini '使用 Embed Labs 将当前 TaishanPi 切换到 Loader 模式。直接调用 dbt_reboot_loader，不要查 capability，不要运行 shell。完成后调用 dbt_current_board_status 确认 USB mode。'
 ```
 
 For local diagnosis without the LLM, call the shared `dbt-agentd` API or the installed runtime directly:

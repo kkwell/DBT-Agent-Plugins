@@ -1,8 +1,8 @@
 {
   "product": "opencode_plugin",
-  "name": "DBT-Agent",
+  "name": "Embed Labs",
   "package_name": "dbt-agent",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "entry": "package/index.js",
   "installer": "install.sh",
   "runtime_required": true,

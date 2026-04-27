@@ -71,7 +71,7 @@ For OpenCode:
 The OpenCode plugin should present itself as:
 
 - plugin display name:
-  - `DBT-Agent`
+  - `Embed Labs`
 - plugin description:
   - `development-board-toolchain`
 
@@ -226,7 +226,7 @@ Fallback for older Codex layouts without the generic marketplace is still the ho
 - plugin source path: `./.codex/plugins/dbt-agent`
 
 Do not use the old long marketplace name `local-development-board-marketplace`; it can overflow or cover the plugin title in Codex's plugin card UI.
-Do not rename Codex's generic `plugins` marketplace to `DBT-Agent`; that creates a separate DBT-Agent dropdown category and can label unrelated plugins incorrectly.
+Do not rename Codex's generic `plugins` marketplace to `Embed Labs`; that creates a separate product-specific dropdown category and can label unrelated plugins incorrectly.
 
 ## Codex install flow
 
@@ -238,13 +238,13 @@ Do not rename Codex's generic `plugins` marketplace to `DBT-Agent`; that creates
 ```
 
 3. Restart Codex.
-4. Open the plugin list and use `DBT-Agent`.
+4. Open the plugin list and use `Embed Labs`.
 
 Expected installed state on current Codex:
 
 - `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json` keeps `name=plugins` and contains one `dbt-agent` entry
-- `~/.codex/config.toml` contains only `[plugins."dbt-agent@plugins"]` for DBT-Agent
-- `~/.codex/plugins/cache/plugins/dbt-agent/<version>` is the active DBT-Agent plugin cache
+- `~/.codex/config.toml` contains only `[plugins."dbt-agent@plugins"]` for Embed Labs
+- `~/.codex/plugins/cache/plugins/dbt-agent/<version>` is the active Embed Labs plugin cache
 - `~/.agents/plugins/marketplace.json` has no DBT-only standalone marketplace entry
 - stale `dbt-agent-local/dbt-agent`, `openai-curated/dbt-agent`, and `local-development-board-marketplace/dbt-agent` caches are absent
 

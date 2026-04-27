@@ -1,11 +1,11 @@
 # OpenCode Plugin Project
 
-This directory is the self-contained source-of-truth project for the DBT-Agent OpenCode plugin.
+This directory is the self-contained source-of-truth project for the Embed Labs OpenCode plugin.
 
 OpenCode package identity:
 
 - package/module name: `dbt-agent`
-- plugin display name: `DBT-Agent`
+- plugin display name: `Embed Labs`
 - description: `development-board-toolchain`
 
 Everything required to maintain the OpenCode plugin lives under this directory:
@@ -53,7 +53,7 @@ following the same packaging model used by projects such as `oh-my-openagent`.
 That means:
 
 - OpenCode plugin entry should be `dbt-agent`, not a local `file://...` directory path
-- the plugin display/export id stays `DBT-Agent`
+- the plugin display/export id stays `Embed Labs`
 - a package `postinstall` step writes `development-board-toolchain.runtime.json` beside the module
 
 The standalone installer remains available as a local fallback. It now installs the package in module
