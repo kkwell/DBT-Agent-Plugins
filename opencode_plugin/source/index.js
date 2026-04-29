@@ -3304,10 +3304,25 @@ async function appendUpdateNoticeIfNeeded(payload, toolkitRoot) {
   return appendCachedUpdateNotice(payload, toolkitRoot)
 }
 
+const pluginBrandAssets = Object.freeze({
+  logo: "./assets/app-logo.png",
+  logoLight: "./assets/app-logo-light.png",
+  logoDark: "./assets/app-logo-dark.png",
+  icon: "./assets/app-icon.png",
+  iconLight: "./assets/app-icon-light.png",
+  iconDark: "./assets/app-icon-dark.png",
+  wordmark: "./assets/embed-labs-wordmark.svg",
+  wordmarkLight: "./assets/embed-labs-wordmark-light.svg",
+  wordmarkDark: "./assets/embed-labs-wordmark-dark.svg",
+})
+
 export const pluginInfo = {
   name: "Embed Labs",
   displayName: "Embed Labs",
   description: "development-board-toolchain board control, capability planning, flashing, and environment tooling for OpenCode.",
+  logo: pluginBrandAssets.logo,
+  icon: pluginBrandAssets.icon,
+  assets: pluginBrandAssets,
 }
 
 async function performPluginUpdate(options = {}) {
@@ -4803,10 +4818,15 @@ export const DevelopmentBoardToolchainPlugin = async () => {
 DevelopmentBoardToolchainPlugin.id = "Embed Labs"
 DevelopmentBoardToolchainPlugin.displayName = "Embed Labs"
 DevelopmentBoardToolchainPlugin.pluginInfo = pluginInfo
+DevelopmentBoardToolchainPlugin.logo = pluginBrandAssets.logo
+DevelopmentBoardToolchainPlugin.icon = pluginBrandAssets.icon
 
 export default {
   id: "Embed Labs",
   displayName: "Embed Labs",
   description: "development-board-toolchain board control, capability planning, flashing, and environment tooling for OpenCode.",
+  logo: pluginBrandAssets.logo,
+  icon: pluginBrandAssets.icon,
+  assets: pluginBrandAssets,
   server: DevelopmentBoardToolchainPlugin,
 }

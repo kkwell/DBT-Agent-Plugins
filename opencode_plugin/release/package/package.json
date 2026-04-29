@@ -7,7 +7,8 @@
   "files": [
     "index.js",
     "postinstall.mjs",
-    "development-board-toolchain.runtime.template.json"
+    "development-board-toolchain.runtime.template.json",
+    "assets"
   ],
   "exports": {
     ".": "./index.js"

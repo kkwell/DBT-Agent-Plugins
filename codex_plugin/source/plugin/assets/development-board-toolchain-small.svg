@@ -1,19 +1,13 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)"/>
-  <rect x="16" y="14" width="30" height="24" rx="5" fill="white" fill-opacity="0.98"/>
-  <rect x="19" y="17" width="24" height="18" rx="3" fill="#16427E"/>
-  <rect x="22" y="20" width="10" height="4" rx="2" fill="white" fill-opacity="0.95"/>
-  <rect x="22" y="27" width="18" height="3" rx="1.5" fill="#A9D3FF"/>
-  <rect x="22" y="32" width="15" height="2.5" rx="1.25" fill="#A9D3FF"/>
-  <rect x="26" y="41" width="10" height="2.8" rx="1.4" fill="#D1DBE9"/>
-  <path d="M44 41C48.2 44.2 50.8 48.2 52 53" stroke="white" stroke-width="3.2" stroke-linecap="round"/>
-  <rect x="49" y="49" width="8" height="8" rx="2.5" fill="#14335E"/>
-  <rect x="50.7" y="50.8" width="4.6" height="4.6" rx="1.3" fill="#66DEFF"/>
-  <circle cx="45.5" cy="15.5" r="4.5" fill="#2ECC71" stroke="white" stroke-width="2"/>
-  <defs>
-    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0C4AA6"/>
-      <stop offset="1" stop-color="#2191D4"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Embed Labs icon</title>
+  <style>
+    .mark { fill: #263238; }
+    .accent { fill: #F2A900; }
+    @media (prefers-color-scheme: dark) {
+      .mark { fill: #F8FAFC; }
+      .accent { fill: #FFC33D; }
+    }
+  </style>
+  <path class="mark" d="M78.8 17.3 118 41.1v16.7L80.4 35.2 45.8 56.7v28.4l34.7 21.5L118 84.1v16.8l-39.2 23.8L31.6 95.9V47.1l47.2-29.8Z"/>
+  <path class="accent" d="M33.6 25.8a15.8 15.8 0 1 1 12.1 25.9L26.1 85.9l9.1 9.1a15.8 15.8 0 1 1-9.6 10.7L8.3 88.4 33.6 44.1a15.8 15.8 0 0 1 0-18.3Zm24.6 51.7 29.3-18.2a15.8 15.8 0 1 1 7.7 11.6L65.9 89.1l-7.7-11.6Z"/>
 </svg>

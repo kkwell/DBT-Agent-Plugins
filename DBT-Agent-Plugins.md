@@ -228,6 +228,24 @@ Fallback for older Codex layouts without the generic marketplace is still the ho
 Do not use the old long marketplace name `local-development-board-marketplace`; it can overflow or cover the plugin title in Codex's plugin card UI.
 Do not rename Codex's generic `plugins` marketplace to `Embed Labs`; that creates a separate product-specific dropdown category and can label unrelated plugins incorrectly.
 
+## Brand assets
+
+Plugin logo assets are sourced from the project-level `logo/` directory.
+
+- light UI icon source: `logo/embed-labs-logo-light.png`
+- dark UI icon source: `logo/embed-labs-logo-dark.png`
+- English wordmark source: `logo/embed-labs-wordmark.svg`
+
+Codex requires the same icon payload in the root plugin assets and in each local skill assets folder:
+
+- `codex_plugin/source/plugin/assets/`
+- `codex_plugin/source/plugin/skills/dbt-agent/assets/`
+- `codex_plugin/source/plugin/skills/taishanpi/assets/`
+- `codex_plugin/source/plugin/skills/rp2350/assets/`
+
+OpenCode packages the same brand assets under `opencode_plugin/source/assets/`; `package.json`
+must include `assets` so the release package carries the logo files.
+
 ## Codex install flow
 
 1. Ensure the shared runtime is installed.

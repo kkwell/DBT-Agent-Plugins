@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 150" role="img" aria-labelledby="title">
+  <title id="title">Embed Labs wordmark for light backgrounds</title>
+  <text x="40" y="100"
+        font-family="Rajdhani, Exo 2, Orbitron, Arial, sans-serif"
+        font-size="82"
+        font-weight="600"
+        letter-spacing="2">
+    <tspan fill="#263238">Embed</tspan>
+    <tspan dx="18" fill="#F2A900">Labs</tspan>
+  </text>
+</svg>

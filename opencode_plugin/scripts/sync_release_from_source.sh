@@ -12,6 +12,8 @@ SOURCE_POSTINSTALL="${PLUGIN_ROOT}/source/postinstall.mjs"
 RELEASE_POSTINSTALL="${PLUGIN_ROOT}/release/package/postinstall.mjs"
 SOURCE_RUNTIME_TEMPLATE="${PLUGIN_ROOT}/source/development-board-toolchain.runtime.template.json"
 RELEASE_RUNTIME_TEMPLATE="${PLUGIN_ROOT}/release/package/development-board-toolchain.runtime.template.json"
+SOURCE_ASSETS="${PLUGIN_ROOT}/source/assets"
+RELEASE_ASSETS="${PLUGIN_ROOT}/release/package/assets"
 
 if [[ ! -f "${SOURCE_INDEX}" ]]; then
   echo "source plugin entry not found: ${SOURCE_INDEX}" >&2
@@ -38,5 +40,10 @@ cp "${SOURCE_INDEX}" "${RELEASE_INDEX}"
 cp "${SOURCE_PACKAGE_JSON}" "${RELEASE_PACKAGE_JSON}"
 cp "${SOURCE_POSTINSTALL}" "${RELEASE_POSTINSTALL}"
 cp "${SOURCE_RUNTIME_TEMPLATE}" "${RELEASE_RUNTIME_TEMPLATE}"
+if [[ -d "${SOURCE_ASSETS}" ]]; then
+  rm -rf "${RELEASE_ASSETS}"
+  mkdir -p "${RELEASE_ASSETS}"
+  cp -R "${SOURCE_ASSETS}/." "${RELEASE_ASSETS}/"
+fi
 
 echo "synced release/package artifacts from source/"
