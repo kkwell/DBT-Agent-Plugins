@@ -1,6 +1,6 @@
 {
   "name": "Embed Labs OpenCode Plugin",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "protocol_version": 1,
   "release_channel": "stable",
   "repository_url": "https://github.com/kkwell/DBT-Agent-Plugins.git",

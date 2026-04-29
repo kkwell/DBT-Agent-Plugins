@@ -2,7 +2,7 @@
   "product": "codex_plugin",
   "name": "dbt-agent",
   "display_name": "Embed Labs",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "plugin_manifest": "package/.codex-plugin/plugin.json",
   "marketplace": "marketplace.json",
   "installer": "install.sh",
