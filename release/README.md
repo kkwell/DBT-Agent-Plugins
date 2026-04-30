@@ -10,8 +10,8 @@ End users should prefer the GitHub Releases page:
 
 Current archive naming:
 
-- `DBT-Agent-OpenCode-v1.0.16.zip`
-- `DBT-Agent-Codex-v1.0.16.zip`
+- `DBT-Agent-OpenCode-v1.0.17.zip`
+- `DBT-Agent-Codex-v1.0.17.zip`
 
 ## Choose Your Platform
 
