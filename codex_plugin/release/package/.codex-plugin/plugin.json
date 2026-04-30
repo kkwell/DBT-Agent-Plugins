@@ -1,6 +1,6 @@
 {
   "name": "dbt-agent",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Codex plugin for Embed Labs, the Codex-facing Development Board Toolchain integration backed by the shared macOS runtime and dbt-agentd.",
   "author": {
     "name": "Kvell",

@@ -1422,6 +1422,10 @@ function normalizeCapabilityAlias(value) {
   const raw = asString(value)
   const key = raw.toLowerCase().replace(/[\s_-]+/g, "")
   const aliasMap = new Map([
+    ["led", "rgb_led"],
+    ["ledcapability", "rgb_led"],
+    ["ledcapabilities", "rgb_led"],
+    ["rgb", "rgb_led"],
     ["ledcontrol", "rgb_led"],
     ["rgbled", "rgb_led"],
     ["tricolorled", "rgb_led"],
@@ -1438,6 +1442,164 @@ function normalizeCapabilityAlias(value) {
     ["pinheader", "pin_header_40pin"],
   ])
   return aliasMap.get(key) || raw
+}
+
+function inferCapabilityFromRequest(value) {
+  const raw = asString(value)
+  if (!raw) return ""
+  const normalized = normalizeCapabilityAlias(raw)
+  if (normalized && normalized !== raw) return normalized
+  const key = raw.toLowerCase().replace(/[\s_-]+/g, "")
+  if (
+    key === "rgbled" ||
+    key === "rgb_led" ||
+    key.includes("rgbled") ||
+    key.includes("trafficlight") ||
+    key.includes("ledcapability") ||
+    key.includes("ledcapabilities") ||
+    key === "led" ||
+    raw.includes("LED") ||
+    raw.includes("led") ||
+    raw.includes("灯")
+  ) {
+    return "rgb_led"
+  }
+  if (key.includes("gpio")) return "gpio"
+  if (key.includes("pwm")) return "pwm"
+  if (key.includes("uart")) return "uart"
+  if (key.includes("i2c")) return "i2c"
+  if (key.includes("spi")) return "spi"
+  if (key.includes("pinheader") || key.includes("40pin") || raw.includes("排针")) return "pin_header_40pin"
+  return normalized
+}
+
+function normalizeDispatchedToolArguments(targetToolName, payload, rawRequest = "") {
+  const next = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? { ...payload }
+    : {}
+  const request = asString(next.request) || asString(rawRequest)
+  if (targetToolName === "dbt_get_capability_context" || targetToolName === "dbt_build_run_program") {
+    if (!asString(next.capability) && asString(next.capability_id)) {
+      next.capability = asString(next.capability_id)
+    }
+    if (!asString(next.capability)) {
+      const inferred = inferCapabilityFromRequest(request)
+      if (inferred) next.capability = inferred
+    }
+  }
+  if (targetToolName === "dbt_apply_effect") {
+    if (!asString(next.capability) && asString(next.capability_id)) {
+      next.capability = asString(next.capability_id)
+    }
+    if (!asString(next.capability)) {
+      const inferred = inferCapabilityFromRequest(request)
+      if (inferred) next.capability = inferred
+    }
+  }
+  return next
+}
+
+function isComplexRgbLedEffectRequest(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return false
+  const capability = normalizeCapabilityAlias(args.capability || inferCapabilityFromRequest(args.request))
+  if (capability && capability !== "rgb_led") return false
+
+  const hasMeaningfulValue = (value) => {
+    if (value === undefined || value === null) return false
+    if (typeof value === "string") return value.trim() !== ""
+    if (Array.isArray(value)) return value.length > 0
+    if (typeof value === "object") return Object.keys(value).length > 0
+    return true
+  }
+
+  const complexKeys = [
+    "multi_step_sequence",
+    "sequence",
+    "steps",
+    "pattern",
+    "repeat",
+    "repeat_count",
+    "duration",
+    "duration_ms",
+    "interval",
+    "interval_ms",
+    "period",
+    "period_ms",
+    "blink",
+    "breath",
+    "fade",
+  ]
+  if (complexKeys.some((key) => hasMeaningfulValue(args[key]))) {
+    return true
+  }
+
+  const request = asString(args.request).toLowerCase()
+  if (!request) return false
+  const complexWords = [
+    "blink",
+    "flash",
+    "flashing",
+    "alternate",
+    "alternating",
+    "sequence",
+    "cycle",
+    "loop",
+    "repeat",
+    "traffic",
+    "breath",
+    "fade",
+    "interval",
+    "duration",
+    "1s",
+    "ms",
+    "闪烁",
+    "交替",
+    "轮流",
+    "循环",
+    "重复",
+    "红绿灯",
+    "交通灯",
+    "呼吸",
+    "渐变",
+    "每隔",
+    "间隔",
+    "秒",
+    "毫秒",
+  ]
+  if (complexWords.some((word) => request.includes(word))) return true
+
+  const colorTokens = [
+    "red",
+    "yellow",
+    "green",
+    "blue",
+    "purple",
+    "white",
+    "红",
+    "黄",
+    "绿",
+    "蓝",
+    "紫",
+    "白",
+  ]
+  const colorCount = colorTokens.reduce((count, token) => count + (request.includes(token) ? 1 : 0), 0)
+  return colorCount >= 2
+}
+
+function complexRgbLedEffectError() {
+  return {
+    ok: false,
+    tool_error: true,
+    error_code: "rgb_led_requires_generated_program",
+    error_message:
+      "TaishanPi rgb_led timing, blinking, repeat, breath, fade, or multi-color sequence requests must be implemented as model-generated C/C++ in the current workspace, then executed with dbtbuildrun/dbt_build_run_program using capability=rgb_led. dbtapplyeffect is reserved for simple solid/off state changes only.",
+    next_tool: "dbtbuildrun",
+    recommended_flow: [
+      "Call dbtcapabilitycontext with request=rgb_led, or arguments_json {\"capability\":\"rgb_led\"}.",
+      "Generate self-contained C/C++ that writes /sys/class/leds RGB brightness/trigger files and loops with the requested timing.",
+      "Call dbtbuildrun with arguments_json containing capability=rgb_led, source, language=c, and a binary_name.",
+    ],
+  }
 }
 
 function normalizeCStringLiteralNewlines(source, language) {
@@ -1559,6 +1721,10 @@ function summarizeBuildRunPayload(payload) {
     local_binary_file: asString(payload.local_binary_file),
     remote_workdir: asString(payload.remote_workdir),
     summary: asString(payload.summary),
+    summary_for_user: asString(payload.summary_for_user),
+    error_code: asString(payload.error_code),
+    error_message: asString(payload.error_message || payload.error),
+    retryable: payload.retryable === true ? true : undefined,
     returncode: Number.isFinite(payload.returncode) ? payload.returncode : undefined,
   }
   if (summary.ok) {
@@ -1576,7 +1742,9 @@ function summarizeBuildRunPayload(payload) {
     stderr_excerpt: stderr,
     stdout_excerpt: stdout,
     summary:
+      summary.summary_for_user ||
       summary.summary ||
+      summary.error_message ||
       (stderr ? "program build or deployment failed; inspect stderr_excerpt" : "program build or deployment failed"),
   }
 }
@@ -2364,23 +2532,28 @@ function guidanceDisabled() {
 
 function parseDispatchArguments(raw) {
   const payload = {}
-  const text = asString(raw?.arguments_json)
-  if (text) {
-    try {
-      const parsed = JSON.parse(text)
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  const rawArgumentsJSON = raw?.arguments_json
+  if (rawArgumentsJSON && typeof rawArgumentsJSON === "object" && !Array.isArray(rawArgumentsJSON)) {
+    Object.assign(payload, rawArgumentsJSON)
+  } else {
+    const text = asString(rawArgumentsJSON)
+    if (text) {
+      try {
+        const parsed = JSON.parse(text)
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return {
+            ok: false,
+            error_code: "invalid_arguments_json",
+            error_message: "arguments_json must decode to a JSON object",
+          }
+        }
+        Object.assign(payload, parsed)
+      } catch (error) {
         return {
           ok: false,
           error_code: "invalid_arguments_json",
-          error_message: "arguments_json must decode to a JSON object",
+          error_message: asString(error?.message || String(error || "")),
         }
-      }
-      Object.assign(payload, parsed)
-    } catch (error) {
-      return {
-        ok: false,
-        error_code: "invalid_arguments_json",
-        error_message: asString(error?.message || String(error || "")),
       }
     }
   }
@@ -4252,7 +4425,10 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         async execute(args) {
           const request = asString(args.request)
           if (!request) throw new Error("request is required")
-          const capability = asString(args.capability) || "rgb_led"
+          const capability = normalizeCapabilityAlias(args.capability) || "rgb_led"
+          if (isComplexRgbLedEffectRequest({ ...args, capability })) {
+            return jsonText(complexRgbLedEffectError())
+          }
           const target = await resolveConnectedMutationTarget(args.board, args.variant, args.device_id)
           await assertCapabilityAvailable(target.board, target.variant, capability)
           const result = await localAgentTool("run_effect", {
@@ -4399,7 +4575,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
 
   const dispatchTools = { ...tools }
   tools.dbttool = tool({
-    description: "Gemini-safe DBT tool dispatcher. Use this for all Development Board Toolchain operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, build-run, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. Put tool-specific arguments as a JSON object string in arguments_json.",
+    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs. Put tool-specific arguments as a JSON object string in arguments_json.",
     args: {
       action: tool.schema.string(),
       request: tool.schema.string().optional(),
@@ -4438,6 +4614,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             "connect-wifi",
             "scan-wifi",
             "scan-bluetooth",
+            "apply-effect",
             "build-run",
             "check-plugin-update",
             "update-plugin",
@@ -4452,7 +4629,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       }
       const dispatchArgs = parseDispatchArguments(args)
       if (dispatchArgs.ok === false) return jsonText(dispatchArgs)
-      return selected.execute(dispatchArgs)
+      return selected.execute(normalizeDispatchedToolArguments(targetToolName, dispatchArgs, args.request))
     },
   })
 
@@ -4464,7 +4641,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtprepare", "dbt_prepare_request", "Resolve a DBT board request before capability or execution planning."],
     ["dbtcapabilities", "dbt_get_board_capabilities", "Get capability summaries for the current or requested board."],
     ["dbtcapabilitysummaries", "dbt_list_capability_summaries", "List concise capability summaries for a board and variant."],
-    ["dbtcapabilitycontext", "dbt_get_capability_context", "Get detailed capability implementation context."],
+    ["dbtcapabilitycontext", "dbt_get_capability_context", "Get detailed capability implementation context. Pass arguments_json {\"capability\":\"rgb_led\"}; request=rgb_led is also accepted and will be mapped to capability=rgb_led."],
     ["dbtboardconfig", "dbt_get_board_config", "Get board and runtime configuration."],
     ["dbtenvcheck", "dbt_check_board_environment", "Check whether the board environment is installed and ready."],
     ["dbtenvinstall", "dbt_install_board_environment", "Install or repair a board environment through local dbt-agentd."],
@@ -4479,8 +4656,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtconnectwifi", "dbt_connect_wifi", "Connect the board to WiFi."],
     ["dbtwifiscan", "dbt_scan_wifi_networks", "Scan nearby WiFi networks."],
     ["dbtbluetoothscan", "dbt_scan_bluetooth_devices", "Scan nearby Bluetooth devices."],
-    ["dbtapplyeffect", "dbt_apply_effect", "Apply a simple direct board effect. For TaishanPi rgb_led, use this only for solid/off state; generate code and use dbt_build_run_program for sequences or timed behavior."],
-    ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability."],
+    ["dbtapplyeffect", "dbt_apply_effect", "Apply a simple direct board effect. For TaishanPi rgb_led, use this only for atomic solid/off state. Do not use this for blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequences; generate C/C++ and use dbtbuildrun instead."],
+    ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability. Use this for TaishanPi rgb_led blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequence requests."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
   ]
@@ -4502,7 +4679,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         }
         const dispatchArgs = parseDispatchArguments(args)
         if (dispatchArgs.ok === false) return jsonText(dispatchArgs)
-        return selected.execute(dispatchArgs)
+        return selected.execute(normalizeDispatchedToolArguments(targetName, dispatchArgs, args.request))
       },
     })
   }
@@ -4537,7 +4714,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       }
       if (input.toolID === "dbttool") {
         output.description =
-          "Use this dispatcher for all DBT operations with Gemini. Common actions: status for current board status; processes for Linux-board process lists; flash-image for blocking TaishanPi dry-run or short image flashing; flash-start plus job-status for long real flashing progress; env-check for environment preflight; board-config for board/runtime config; capabilities or capability-context for knowledge; chip-probe/cpu-frequency/ddr-frequency/cpu-temperature for live chip data; wireless-probe/scan-wifi/scan-bluetooth/connect-wifi for wireless workflows. Pass tool-specific arguments as a JSON object string in arguments_json."
+          "Use this dispatcher for DBT operations with Gemini. Common actions: status for current board status; processes for Linux-board process lists; flash-image for blocking TaishanPi dry-run or short image flashing; flash-start plus job-status for long real flashing progress; env-check for environment preflight; board-config for board/runtime config; capabilities or capability-context for knowledge; chip-probe/cpu-frequency/ddr-frequency/cpu-temperature for live chip data; wireless-probe/scan-wifi/scan-bluetooth/connect-wifi for wireless workflows; build-run for model-generated Linux-board C/C++ execution. action=apply-effect is only for simple solid/off board effects. Pass tool-specific arguments as a JSON object string in arguments_json."
       }
       if (input.toolID === "dbt_current_board_status") {
         output.description =
@@ -4599,6 +4776,10 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         output.description =
           "Use after capability-summary selection. Pass the exact selected capability id. Do not invent alternate names like led_control when the capability is rgb_led."
       }
+      if (input.toolID === "dbtcapabilitycontext") {
+        output.description =
+          "Use after selecting a capability. Pass arguments_json {\"capability\":\"rgb_led\"}; request=rgb_led is accepted as a compatibility shorthand. Do not pass capability names only inside unrelated JSON keys."
+      }
       if (input.toolID === "dbt_probe_chip_control") {
         output.description =
           "For live CPU, DDR, temperature, memory, or storage questions, call this tool directly and answer from summary_for_user or the returned measured values."
@@ -4651,7 +4832,10 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       const aliasOnly = visibleToolNames.length > 0 && visibleToolNames.every((name) => aliasToolNames.has(name))
       if (aliasOnly) {
         output.system.push(
-          "For Development Board Toolchain requests, call the DBT alias tools. Use dbtstatus for current board status, dbtflashimage for blocking dry-run or short TaishanPi factory/custom image flashing, dbtflashstart plus dbtjobstatus for long real flashing progress, dbtenvcheck for preflight, dbtboardconfig for config, dbtcapabilities or dbtcapabilitycontext for knowledge, dbtapplyeffect for TaishanPi rgb_led effects including multi-color sequences, dbtprocesses for Linux-board process lists, and dbtchipprobe/dbtcpufrequency/dbtddrfrequency/dbtcputemperature/dbtwirelessprobe/dbtwifiscan/dbtbluetoothscan for live probes.",
+          "For Development Board Toolchain requests, call the DBT alias tools. Use dbtstatus for current board status, dbtflashimage for blocking dry-run or short TaishanPi factory/custom image flashing, dbtflashstart plus dbtjobstatus for long real flashing progress, dbtenvcheck for preflight, dbtboardconfig for config, dbtcapabilities or dbtcapabilitycontext for knowledge, dbtapplyeffect only for simple TaishanPi rgb_led solid/off state, dbtbuildrun for generated Linux-board C/C++ execution including rgb_led blinking/timing/multi-color sequences, dbtprocesses for Linux-board process lists, and dbtchipprobe/dbtcpufrequency/dbtddrfrequency/dbtcputemperature/dbtwirelessprobe/dbtwifiscan/dbtbluetoothscan for live probes.",
+        )
+        output.system.push(
+          "For TaishanPi rgb_led requests with timing, blinking, breathing, repeat counts, fade, traffic-light behavior, or multi-color sequences such as red/yellow/green/blue every 1s, do not call dbtapplyeffect. Call dbtcapabilitycontext with request=rgb_led or arguments_json {\"capability\":\"rgb_led\"}, generate self-contained C/C++ in the current workspace, then call dbtbuildrun with capability=rgb_led.",
         )
         output.system.push(
           "For long real image flashing, prefer dbtflashstart with arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}, return the job_id, then call dbtjobstatus with that job_id to show current progress. Use dbtflashimage with {\"dry_run\":\"true\"} for validation without real flashing.",
@@ -4662,7 +4846,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         return
       }
       output.system.push(
-        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect for TaishanPi rgb_led effects including multi-color sequences, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and pass extra arguments as JSON in arguments_json.",
+        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect only for simple TaishanPi rgb_led solid/off state, action=build-run for generated Linux-board C/C++ execution including rgb_led blinking/timing/multi-color sequences, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and pass extra arguments as JSON in arguments_json.",
       )
       output.system.push(
         "For live board status, connection, USB ECM, SSH, control-service, or execution-precheck questions, call dbttool with action=status first and answer from that result.",
