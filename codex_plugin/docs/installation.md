@@ -4,7 +4,8 @@ This Codex plugin always uses the shared runtime installed at:
 
 - `~/Library/development-board-toolchain/runtime`
 
-When Codex has its generic local plugin mirror, the plugin package installs into:
+When Codex has its generic local plugin mirror, and that mirror is still named
+`plugins`, the plugin package installs into:
 
 - `~/.codex/.tmp/plugins/plugins/dbt-agent`
 
@@ -16,11 +17,20 @@ That marketplace must stay named `plugins` with `interface.displayName` set to
 `Plugins`; DBT-Agent is only one plugin entry inside it, using source path
 `./plugins/dbt-agent`.
 
+If Codex has refreshed `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`
+as the official `openai-curated` marketplace, DBT-Agent must not write into it.
+The installer then uses the stable home-local marketplace:
+
+- plugin package: `~/.codex/plugins/dbt-agent`
+- marketplace file: `~/.agents/plugins/marketplace.json`
+- marketplace identity: `plugins`
+- plugin source path: `./.codex/plugins/dbt-agent`
+
 Fallback for older Codex layouts without that generic marketplace is:
 
 - plugin package: `~/.codex/plugins/dbt-agent`
 - marketplace file: `~/.agents/plugins/marketplace.json`
-- marketplace identity: `dbt-agent-local`
+- marketplace identity: `plugins`
 
 The old `local-development-board-marketplace` marketplace name must not be restored because it is too long for the current Codex plugin card layout.
 
@@ -60,9 +70,9 @@ The preflight check validates:
 3. Restart Codex.
 4. Open the plugin list. `DBT-Agent` should appear as the local Development Board Toolchain plugin.
 
-The installer merges the `dbt-agent` entry into Codex's generic `plugins` marketplace when it exists. It does not replace other generic marketplace plugin entries.
+The installer merges the `dbt-agent` entry into Codex's generic `plugins` marketplace when it exists and is not the official `openai-curated` marketplace. It does not replace other generic marketplace plugin entries.
 It also syncs an installed local copy into Codex's plugin cache and enables the matching plugin state in `~/.codex/config.toml`.
-The installer removes stale standalone `dbt-agent-local` state when the generic `plugins` marketplace is available.
+The installer removes stale standalone `dbt-agent-local` and `openai-curated/dbt-agent` state.
 
 ## Install The Runtime First
 
@@ -116,7 +126,7 @@ MCP approval is a Codex-client security decision. DBT-Agent can mark tools accur
   - current Codex: `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`
   - fallback layout: `~/.agents/plugins/marketplace.json`
 - confirm `~/.codex/config.toml` contains the enabled state for the installed plugin entry
-- confirm current Codex keeps `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json` named `plugins`
+- confirm `~/.codex/config.toml` points at `dbt-agent@plugins`, not `dbt-agent@openai-curated`
 - confirm stale DBT-Agent caches are absent:
   - `~/.codex/plugins/cache/dbt-agent-local/dbt-agent`
   - `~/.codex/plugins/cache/openai-curated/dbt-agent`

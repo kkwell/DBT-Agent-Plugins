@@ -10,7 +10,27 @@ COMMON_SH="${RELEASE_ROOT}/../../scripts/installer_common.sh"
 DEFAULT_CODEX_HOME="${HOME}/.codex"
 DEFAULT_PLUGIN_REPO="${DEFAULT_CODEX_HOME}/.tmp/plugins"
 DEFAULT_PLUGIN_REPO_MARKETPLACE_PATH="${DEFAULT_PLUGIN_REPO}/.agents/plugins/marketplace.json"
-if [[ -f "${DEFAULT_PLUGIN_REPO_MARKETPLACE_PATH}" ]]; then
+
+codex_tmp_marketplace_name() {
+  local marketplace_path="$1"
+  perl -MJSON::PP -e '
+      use strict;
+      use warnings;
+      my ($path) = @ARGV;
+      open my $fh, "<", $path or exit 1;
+      local $/;
+      my $payload = eval { decode_json(<$fh>) } || exit 1;
+      close $fh;
+      print $payload->{name} // q{};
+    ' "${marketplace_path}" 2>/dev/null || true
+}
+
+# Newer Codex builds use ~/.codex/.tmp/plugins for the official openai-curated
+# marketplace. That directory is client-managed and can be refreshed at any time,
+# so DBT-Agent must only use it when it is explicitly the generic local
+# "plugins" marketplace. Otherwise use the stable home-local marketplace.
+if [[ -f "${DEFAULT_PLUGIN_REPO_MARKETPLACE_PATH}" ]] && \
+  [[ "$(codex_tmp_marketplace_name "${DEFAULT_PLUGIN_REPO_MARKETPLACE_PATH}")" == "plugins" ]]; then
   DEFAULT_MARKETPLACE_PATH="${DEFAULT_PLUGIN_REPO_MARKETPLACE_PATH}"
 else
   DEFAULT_MARKETPLACE_PATH="${HOME}/.agents/plugins/marketplace.json"

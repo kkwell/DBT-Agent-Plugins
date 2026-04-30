@@ -39,14 +39,21 @@ When `source/plugin/` or `source/marketplace.json` changes, sync the release ass
 
 `DBT` is the short form of `Development Board Toolchain`. `Embed Labs` is the Codex-facing plugin display name.
 
-On current Codex, Embed Labs is installed as one plugin inside Codex's generic
-local `plugins` marketplace. The marketplace entry lives at
-`~/.codex/.tmp/plugins/.agents/plugins/marketplace.json`, keeps
-`name=plugins`, and points to `./plugins/dbt-agent`.
+On current Codex, Embed Labs is installed as one plugin inside the generic
+local `plugins` marketplace. If Codex's temporary marketplace at
+`~/.codex/.tmp/plugins/.agents/plugins/marketplace.json` still has `name=plugins`,
+the plugin package lives at `~/.codex/.tmp/plugins/plugins/dbt-agent` and points
+to `./plugins/dbt-agent`.
+
+If Codex refreshes that temporary marketplace as the official `openai-curated`
+marketplace, the installer must not write DBT-Agent there. It falls back to the
+stable home-local marketplace at `~/.agents/plugins/marketplace.json`, keeps
+`name=plugins`, installs the package at `~/.codex/plugins/dbt-agent`, and points
+to `./.codex/plugins/dbt-agent`.
 
 Fallback for older Codex layouts without that generic marketplace is the
 home-local `~/.agents/plugins/marketplace.json` marketplace with
-`name=dbt-agent-local`, pointing to `./.codex/plugins/dbt-agent`.
+`name=plugins`, pointing to `./.codex/plugins/dbt-agent`.
 
 Do not restore the old long marketplace name
 `local-development-board-marketplace`; it truncates poorly in the Codex plugin

@@ -204,7 +204,8 @@ Codex uses the same shared runtime root:
 
 - `~/Library/development-board-toolchain/runtime`
 
-When Codex exposes its generic local plugin mirror, the local Codex plugin package installs into:
+When Codex exposes its generic local plugin mirror, and that mirror is still named `plugins`,
+the local Codex plugin package installs into:
 
 - `~/.codex/.tmp/plugins/plugins/dbt-agent`
 
@@ -219,10 +220,18 @@ That marketplace identity must remain:
 - plugin package `name`: `dbt-agent`
 - plugin source path from the generic marketplace: `./plugins/dbt-agent`
 
+If Codex refreshes `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json` as the official
+`openai-curated` marketplace, do not write DBT-Agent there. Use the stable home-local
+marketplace instead:
+
+- `~/.agents/plugins/marketplace.json`
+- marketplace `name`: `plugins`
+- plugin source path: `./.codex/plugins/dbt-agent`
+
 Fallback for older Codex layouts without the generic marketplace is still the home-local marketplace:
 
 - `~/.agents/plugins/marketplace.json`
-- marketplace `name`: `dbt-agent-local`
+- marketplace `name`: `plugins`
 - plugin source path: `./.codex/plugins/dbt-agent`
 
 Do not use the old long marketplace name `local-development-board-marketplace`; it can overflow or cover the plugin title in Codex's plugin card UI.
@@ -260,10 +269,10 @@ must include `assets` so the release package carries the logo files.
 
 Expected installed state on current Codex:
 
-- `~/.codex/.tmp/plugins/.agents/plugins/marketplace.json` keeps `name=plugins` and contains one `dbt-agent` entry
+- `~/.agents/plugins/marketplace.json` keeps `name=plugins` and contains one `dbt-agent` entry when the Codex temporary marketplace is `openai-curated`
 - `~/.codex/config.toml` contains only `[plugins."dbt-agent@plugins"]` for Embed Labs
 - `~/.codex/plugins/cache/plugins/dbt-agent/<version>` is the active Embed Labs plugin cache
-- `~/.agents/plugins/marketplace.json` has no DBT-only standalone marketplace entry
+- the official `openai-curated` marketplace has no DBT-Agent entry
 - stale `dbt-agent-local/dbt-agent`, `openai-curated/dbt-agent`, and `local-development-board-marketplace/dbt-agent` caches are absent
 
 ## Codex CLI usage
