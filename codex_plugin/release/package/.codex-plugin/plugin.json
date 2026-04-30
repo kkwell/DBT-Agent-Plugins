@@ -1,13 +1,13 @@
 {
   "name": "dbt-agent",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Codex plugin for Embed Labs, the Codex-facing Development Board Toolchain integration backed by the shared macOS runtime and dbt-agentd.",
   "author": {
     "name": "Kvell",
     "email": "support@example.invalid",
-    "url": "https://kong-cn.com/"
+    "url": "https://embedboard.com/"
   },
-  "homepage": "https://kong-cn.com/",
+  "homepage": "https://embedboard.com/",
   "repository": "https://github.com/kkwell/DBT-Agent-Plugins",
   "license": "Proprietary",
   "keywords": [
@@ -28,7 +28,7 @@
       "Interactive",
       "Hardware Control"
     ],
-    "websiteURL": "https://kong-cn.com/",
+    "websiteURL": "https://embedboard.com/",
     "privacyPolicyURL": "https://github.com/kkwell/DBT-Agent-Plugins",
     "termsOfServiceURL": "https://github.com/kkwell/DBT-Agent-Plugins",
     "defaultPrompt": [

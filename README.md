@@ -76,8 +76,8 @@ Release entry for end users:
   - `./release/install-opencode.sh`
   - `./release/install-codex.sh`
 - downloadable archives:
-  - `DBT-Agent-OpenCode-v1.0.15.zip`
-  - `DBT-Agent-Codex-v1.0.15.zip`
+  - `DBT-Agent-OpenCode-v1.0.16.zip`
+  - `DBT-Agent-Codex-v1.0.16.zip`
 - offline runtime download:
   - [Baidu Netdisk runtime package](https://pan.baidu.com/s/1SVGvOmNEWLoALkf7Sfi0dQ?pwd=0001)
   - password: `0001`

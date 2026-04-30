@@ -35,7 +35,7 @@ When `source/plugin/` or `source/marketplace.json` changes, sync the release ass
 - Plugin display name: `Embed Labs`
 - Full product name in descriptions: `Development Board Toolchain`
 - Developer: `Kvell`
-- Website: `https://kong-cn.com/`
+- Website: `https://embedboard.com/`
 
 `DBT` is the short form of `Development Board Toolchain`. `Embed Labs` is the Codex-facing plugin display name.
 

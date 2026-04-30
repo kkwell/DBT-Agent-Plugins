@@ -2,7 +2,7 @@
   "product": "codex_plugin",
   "name": "dbt-agent",
   "display_name": "Embed Labs",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "plugin_manifest": "package/.codex-plugin/plugin.json",
   "marketplace": "marketplace.json",
   "installer": "install.sh",
@@ -11,5 +11,5 @@
   "plugin_install_dir": "~/.codex/plugins/dbt-agent",
   "marketplace_install_dir": "~/.agents/plugins/marketplace.json",
   "developer": "Kvell",
-  "website": "https://kong-cn.com/"
+  "website": "https://embedboard.com/"
 }
