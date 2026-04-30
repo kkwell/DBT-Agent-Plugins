@@ -28,15 +28,29 @@ fi
 TAG="v${VERSION}"
 DIST_ROOT="${REPO_ROOT}/dist"
 NOTES_FILE="${DIST_ROOT}/RELEASE_NOTES_v${VERSION}.md"
+ASSETS=(
+  "${DIST_ROOT}/DBT-Agent-OpenCode-v${VERSION}.zip"
+  "${DIST_ROOT}/DBT-Agent-OpenCode-v${VERSION}.tar.gz"
+  "${DIST_ROOT}/DBT-Agent-Codex-v${VERSION}.zip"
+  "${DIST_ROOT}/DBT-Agent-Codex-v${VERSION}.tar.gz"
+  "${DIST_ROOT}/SHA256SUMS.txt"
+)
+
+for asset in "${ASSETS[@]}"; do
+  if [[ ! -f "${asset}" ]]; then
+    echo "error: release asset missing: ${asset}" >&2
+    exit 1
+  fi
+done
 
 git -C "${REPO_ROOT}" rev-parse "${TAG}" >/dev/null 2>&1 || git -C "${REPO_ROOT}" tag -a "${TAG}" -m "Release ${TAG}"
 git -C "${REPO_ROOT}" push origin "${TAG}"
 
 if gh release view "${TAG}" --repo kkwell/DBT-Agent-Plugins >/dev/null 2>&1; then
-  gh release upload "${TAG}" "${DIST_ROOT}"/*.zip "${DIST_ROOT}"/*.tar.gz "${DIST_ROOT}/SHA256SUMS.txt" --clobber --repo kkwell/DBT-Agent-Plugins
+  gh release upload "${TAG}" "${ASSETS[@]}" --clobber --repo kkwell/DBT-Agent-Plugins
   gh release edit "${TAG}" --notes-file "${NOTES_FILE}" --repo kkwell/DBT-Agent-Plugins
 else
-  gh release create "${TAG}" "${DIST_ROOT}"/*.zip "${DIST_ROOT}"/*.tar.gz "${DIST_ROOT}/SHA256SUMS.txt" \
+  gh release create "${TAG}" "${ASSETS[@]}" \
     --title "DBT-Agent Plugins ${TAG}" \
     --notes-file "${NOTES_FILE}" \
     --repo kkwell/DBT-Agent-Plugins
