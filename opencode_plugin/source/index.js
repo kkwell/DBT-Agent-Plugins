@@ -4240,7 +4240,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_apply_effect: tool({
-        description: "Plan and apply a natural-language board effect through the installed DBT runtime. For TaishanPi rgb_led effects, including simple colors, off, heartbeat, timer blink, breath, repeat counts, and multi-color sequences, use this instead of dbt_build_run_program; the runtime owns direct sysfs versus generated C and writes generated artifacts under the current workspace when compilation is needed.",
+        description: "Apply a simple direct board effect through the installed DBT runtime. For TaishanPi rgb_led, use this only for atomic solid/off state changes. For timing, blinking, breathing, repeat counts, multi-step sequences, or traffic-light behavior, generate self-contained C/C++ in the current workspace and use dbt_build_run_program with capability=rgb_led.",
         args: {
           request: tool.schema.string(),
           capability: tool.schema.string().optional(),
@@ -4479,7 +4479,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtconnectwifi", "dbt_connect_wifi", "Connect the board to WiFi."],
     ["dbtwifiscan", "dbt_scan_wifi_networks", "Scan nearby WiFi networks."],
     ["dbtbluetoothscan", "dbt_scan_bluetooth_devices", "Scan nearby Bluetooth devices."],
-    ["dbtapplyeffect", "dbt_apply_effect", "Plan and apply a board effect. Use this for TaishanPi rgb_led effects, including simple colors and multi-color sequences."],
+    ["dbtapplyeffect", "dbt_apply_effect", "Apply a simple direct board effect. For TaishanPi rgb_led, use this only for solid/off state; generate code and use dbt_build_run_program for sequences or timed behavior."],
     ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
@@ -4754,7 +4754,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "For run or execute requests, do not end with a raw source code block unless the user explicitly asked for code only. If live execution is available, continue to dbt_build_run_program.",
       )
       output.system.push(
-        "For TaishanPi rgb_led natural-language effects, including color/off/heartbeat/timer blink, precise timing, repeat counts, multi-step sequences, breath, fade, and traffic-light style red/yellow/green cycling, call dbt_apply_effect/dbttool action=apply-effect instead of generating C. Do not fall back to dbt_build_run_program unless the user is explicitly asking to write and run a custom program outside the LED effect contract.",
+        "Treat TaishanPi rgb_led as a capability contract, not as a built-in application feature. Use dbt_apply_effect/dbttool action=apply-effect only for simple atomic solid/off state. For timing, blinking, breathing, repeat counts, multi-step sequences, fade, or traffic-light style red/yellow/green cycling, generate self-contained C/C++ in the current workspace and call dbt_build_run_program with capability=rgb_led.",
       )
       output.system.push(
         "For TaishanPi build or environment work, use dbt_get_board_config with probe_env=true. For generated program build/run, prefer build_mode auto or omit build_mode so the runtime can probe the running board rootfs/sysroot ABI and choose docker or local-llvm before compiling. Do not infer the application compiler from the kernel compiler string alone. Pass an explicit build_mode only when the user selected a mode, when checking/installing that specific environment, or when flashing/downloading that specific image family.",
