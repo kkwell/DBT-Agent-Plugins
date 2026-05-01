@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${REPO_ROOT}/.." && pwd)"
 DIST_ROOT="${REPO_ROOT}/dist"
 TMP_ROOT="${DIST_ROOT}/.tmp"
 
@@ -117,6 +118,8 @@ build_platform_archive() {
 
 OPENCODE_ARCHIVE="DBT-Agent-OpenCode-v${VERSION}"
 CODEX_ARCHIVE="DBT-Agent-Codex-v${VERSION}"
+RUNTIME_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/runtime/development-board-toolchain-runtime-${VERSION}.tar.gz"
+AGENT_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/agent/dbt-agentd-macos-arm64-${VERSION}.tar.gz"
 
 build_platform_archive \
   "opencode" \
@@ -139,6 +142,12 @@ build_platform_archive \
 (
   cd "${DIST_ROOT}"
   shasum -a 256 "${OPENCODE_ARCHIVE}.zip" "${OPENCODE_ARCHIVE}.tar.gz" "${CODEX_ARCHIVE}.zip" "${CODEX_ARCHIVE}.tar.gz" > SHA256SUMS.txt
+  if [[ -f "${RUNTIME_ARCHIVE_PATH}" ]]; then
+    (cd "$(dirname "${RUNTIME_ARCHIVE_PATH}")" && shasum -a 256 "$(basename "${RUNTIME_ARCHIVE_PATH}")") >> SHA256SUMS.txt
+  fi
+  if [[ -f "${AGENT_ARCHIVE_PATH}" ]]; then
+    (cd "$(dirname "${AGENT_ARCHIVE_PATH}")" && shasum -a 256 "$(basename "${AGENT_ARCHIVE_PATH}")") >> SHA256SUMS.txt
+  fi
 )
 
 cat > "${DIST_ROOT}/RELEASE_NOTES_v${VERSION}.md" <<EOF
@@ -150,6 +159,8 @@ Assets:
 - ${OPENCODE_ARCHIVE}.tar.gz
 - ${CODEX_ARCHIVE}.zip
 - ${CODEX_ARCHIVE}.tar.gz
+- development-board-toolchain-runtime-${VERSION}.tar.gz
+- dbt-agentd-macos-arm64-${VERSION}.tar.gz
 
 Each archive is platform-specific and includes a top-level \`install.sh\` and \`install.command\`.
 Users only need to download the matching platform archive, extract it, and run the top-level installer.

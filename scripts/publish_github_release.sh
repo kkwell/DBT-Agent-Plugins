@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${REPO_ROOT}/.." && pwd)"
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "error: gh is required to publish GitHub releases" >&2
@@ -28,6 +29,8 @@ fi
 TAG="v${VERSION}"
 DIST_ROOT="${REPO_ROOT}/dist"
 NOTES_FILE="${DIST_ROOT}/RELEASE_NOTES_v${VERSION}.md"
+RUNTIME_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/runtime/development-board-toolchain-runtime-${VERSION}.tar.gz"
+AGENT_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/agent/dbt-agentd-macos-arm64-${VERSION}.tar.gz"
 ASSETS=(
   "${DIST_ROOT}/DBT-Agent-OpenCode-v${VERSION}.zip"
   "${DIST_ROOT}/DBT-Agent-OpenCode-v${VERSION}.tar.gz"
@@ -35,6 +38,13 @@ ASSETS=(
   "${DIST_ROOT}/DBT-Agent-Codex-v${VERSION}.tar.gz"
   "${DIST_ROOT}/SHA256SUMS.txt"
 )
+
+if [[ -f "${RUNTIME_ARCHIVE_PATH}" ]]; then
+  ASSETS+=("${RUNTIME_ARCHIVE_PATH}")
+fi
+if [[ -f "${AGENT_ARCHIVE_PATH}" ]]; then
+  ASSETS+=("${AGENT_ARCHIVE_PATH}")
+fi
 
 for asset in "${ASSETS[@]}"; do
   if [[ ! -f "${asset}" ]]; then
