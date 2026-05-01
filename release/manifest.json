@@ -1,6 +1,6 @@
 {
   "name": "DBT-Agent-Plugins",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "protocol_version": 1,
   "release_entry": "release/install.sh",
   "github_releases": "https://github.com/kkwell/DBT-Agent-Plugins/releases",
@@ -14,14 +14,14 @@
   },
   "release_assets": {
     "opencode": {
-      "root_dir": "DBT-Agent-OpenCode-v1.0.19",
-      "zip": "DBT-Agent-OpenCode-v1.0.19.zip",
-      "tar_gz": "DBT-Agent-OpenCode-v1.0.19.tar.gz"
+      "root_dir": "DBT-Agent-OpenCode-v1.0.20",
+      "zip": "DBT-Agent-OpenCode-v1.0.20.zip",
+      "tar_gz": "DBT-Agent-OpenCode-v1.0.20.tar.gz"
     },
     "codex": {
-      "root_dir": "DBT-Agent-Codex-v1.0.19",
-      "zip": "DBT-Agent-Codex-v1.0.19.zip",
-      "tar_gz": "DBT-Agent-Codex-v1.0.19.tar.gz"
+      "root_dir": "DBT-Agent-Codex-v1.0.20",
+      "zip": "DBT-Agent-Codex-v1.0.20.zip",
+      "tar_gz": "DBT-Agent-Codex-v1.0.20.tar.gz"
     }
   },
   "platforms": {
