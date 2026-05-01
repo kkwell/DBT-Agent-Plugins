@@ -32,3 +32,4 @@ description: Use for TaishanPi Linux-board work through DBT tools, including 1M-
 - For `进入 Loader`, `进入下载模式`, `loader mode`, or `download mode`, call `dbt_reboot_loader` directly. Do not route this through `dbt_get_capability_context`.
 - For normal reboot, or for returning from Loader USB back to the normal runtime state, call `dbt_reboot_device`.
 - For full factory/init image flashing, call `dbt_flash_image`. The installed runtime is responsible for moving between USB ECM runtime and Loader USB modes.
+- For startup-logo, boot-logo, splash-logo, or logo replacement requests, call `dbt_update_logo` directly with the user-provided host image path plus requested `rotate`, `scale`, `build_mode`, and `flash` options. Do not inspect or edit boot workspace files, do not manually convert the image, and do not manually run `rebuild_boot.sh`; the runtime `update-logo` method owns image conversion, sizing, boot/resource rebuild, and optional boot flashing.

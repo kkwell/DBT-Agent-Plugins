@@ -4125,7 +4125,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_update_logo: tool({
-        description: "Use a local image file from the current workspace to replace the startup boot logo, rebuild boot/resource assets, and optionally flash the boot partition. For requests like '把图片 xxx 作为启动 logo 重新烧写到开发板', call this directly. If the user asks to reflash it to the board, set flash=true.",
+        description: "Use a local image file from the current workspace to replace the startup boot logo through the runtime update-logo method. Call this directly for startup-logo requests; do not manually convert images or run rebuild scripts. The runtime handles image conversion, sizing, boot/resource rebuild, and optional boot flash. If the user asks to reflash it to the board, set flash=true.",
         args: {
           device_id: tool.schema.string().optional(),
           logo_path: tool.schema.string(),

@@ -47,6 +47,7 @@ Supported families:
 - For TaishanPi or other Linux-board requests to enter Loader/download mode, call `dbt_reboot_loader` directly. Do not call capability summary/context tools to discover this path.
 - For normal board reboot requests, including returning a Linux board from Loader USB to the normal runtime state, call `dbt_reboot_device` directly.
 - For full TaishanPi image flashing, call `dbt_flash_image` and let `dbt-agentd`/the installed runtime handle running-vs-Loader state transitions.
+- For startup-logo, boot-logo, splash-logo, or logo replacement requests, call `dbt_update_logo` directly with the user-provided host image path plus requested `rotate`, `scale`, `build_mode`, and `flash` options. Do not inspect boot workspace files, do not manually run `sips`, `magick`, `convert`, `rebuild_boot.sh`, or `dbt_flash_image`; the runtime `update-logo` method owns image conversion, sizing, boot/resource rebuild, and optional boot flashing.
 - Do not invent Pico SDK include paths, link libraries, or support headers. Use DBT capability context exactly.
 
 ## Routing
