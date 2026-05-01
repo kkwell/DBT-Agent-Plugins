@@ -2620,6 +2620,9 @@ function normalizeDispatchAction(value) {
     ["bluetooth-scan", "scan-bluetooth"],
     ["build-run", "build-run"],
     ["run-program", "build-run"],
+    ["qt-build-run", "qt-build-run"],
+    ["qt-run", "qt-build-run"],
+    ["qtquick-run", "qt-build-run"],
     ["check-plugin-update", "check-plugin-update"],
     ["update-plugin", "update-plugin"],
     ["rp2350-detect", "rp2350-detect"],
@@ -2660,6 +2663,7 @@ function dispatchTargetToolName(action) {
     ["scan-bluetooth", "dbt_scan_bluetooth_devices"],
     ["apply-effect", "dbt_apply_effect"],
     ["build-run", "dbt_build_run_program"],
+    ["qt-build-run", "dbt_qt_build_run_app"],
     ["check-plugin-update", "dbt_check_plugin_update"],
     ["update-plugin", "dbt_update_plugin"],
     ["rp2350-detect", "dbt_rp2350_detect"],
@@ -2699,6 +2703,7 @@ function geminiAliasToolNames() {
     "dbtbluetoothscan",
     "dbtapplyeffect",
     "dbtbuildrun",
+    "dbtqtbuildrun",
     "dbtcheckpluginupdate",
     "dbtupdateplugin",
   ])
@@ -4125,7 +4130,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_update_logo: tool({
-        description: "Use a local image file from the current workspace to replace the startup boot logo, rebuild boot/resource assets, and optionally flash the boot partition. For requests like '把图片 xxx 作为启动 logo 重新烧写到开发板', call this directly. If the user asks to reflash it to the board, set flash=true.",
+        description: "Use a local image file from the current workspace to replace the startup boot logo through the runtime update-logo method. Call this directly for startup-logo requests; do not manually convert images or run rebuild scripts. The runtime handles image conversion, sizing, boot/resource rebuild, and optional boot flash. If the user asks to reflash it to the board, set flash=true.",
         args: {
           device_id: tool.schema.string().optional(),
           logo_path: tool.schema.string(),
@@ -4133,6 +4138,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           rotate: tool.schema.string().optional(),
           scale: tool.schema.string().optional(),
           dtb_name: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
           flash: tool.schema.string().optional(),
         },
         async execute(args) {
@@ -4153,6 +4159,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             rotate: asString(args.rotate),
             scale: asString(args.scale),
             dtb_name: asString(args.dtb_name),
+            build_mode: asString(args.build_mode),
             flash: boolValue(args.flash),
           }, { timeoutMs: 120000 }))
         },
@@ -4483,6 +4490,42 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           return jsonText(summarizeBuildRunPayload(result))
         },
       }),
+      dbt_qt_build_run_app: tool({
+        description: "Build, upload, and run a Qt/Qt Quick project already created in the current workspace. Use this for TaishanPi QtQuick UI/application requests instead of dbt_build_run_program or qmlscene.",
+        args: {
+          project_dir: tool.schema.string(),
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          binary_name: tool.schema.string().optional(),
+          remote_app_dir: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
+          qpa_platform: tool.schema.string().optional(),
+          run_args: tool.schema.string().optional(),
+          foreground: tool.schema.string().optional(),
+          dry_run: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const projectDir = asString(args.project_dir)
+          if (!projectDir) throw new Error("project_dir is required")
+          const target = await resolveConnectedMutationTarget(args.board, args.variant, args.device_id)
+          const result = await localAgentTool("qt_build_run_app", {
+            board_id: target.board,
+            variant_id: target.variant,
+            device_id: asString(args.device_id) || target.device_id,
+            project_dir: projectDir,
+            workspace: process.cwd(),
+            binary_name: asString(args.binary_name),
+            remote_app_dir: asString(args.remote_app_dir),
+            build_mode: asString(args.build_mode),
+            qpa_platform: asString(args.qpa_platform),
+            run_args: asString(args.run_args),
+            foreground: boolValue(args.foreground),
+            dry_run: boolValue(args.dry_run),
+          }, { timeoutMs: 900000 })
+          return jsonText(result)
+        },
+      }),
       dbt_submit_insight_bundle: tool({
         description: "Store a standardized local insight bundle through dbt-agentd. The bundle stays on the local queue now; server upload is intentionally not enabled yet.",
         args: {
@@ -4575,7 +4618,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
 
   const dispatchTools = { ...tools }
   tools.dbttool = tool({
-    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs. Put tool-specific arguments as a JSON object string in arguments_json.",
+    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, qt-build-run, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs; use action=qt-build-run after creating a Qt/QtQuick project in the current workspace. Put tool-specific arguments as a JSON object string in arguments_json.",
     args: {
       action: tool.schema.string(),
       request: tool.schema.string().optional(),
@@ -4616,6 +4659,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             "scan-bluetooth",
             "apply-effect",
             "build-run",
+            "qt-build-run",
             "check-plugin-update",
             "update-plugin",
             "rp2350-detect",
@@ -4658,6 +4702,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtbluetoothscan", "dbt_scan_bluetooth_devices", "Scan nearby Bluetooth devices."],
     ["dbtapplyeffect", "dbt_apply_effect", "Apply a simple direct board effect. For TaishanPi rgb_led, use this only for atomic solid/off state. Do not use this for blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequences; generate C/C++ and use dbtbuildrun instead."],
     ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability. Use this for TaishanPi rgb_led blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequence requests."],
+    ["dbtqtbuildrun", "dbt_qt_build_run_app", "Build, upload, and run a Qt/QtQuick project from the current workspace on TaishanPi."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
   ]
@@ -4714,7 +4759,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       }
       if (input.toolID === "dbttool") {
         output.description =
-          "Use this dispatcher for DBT operations with Gemini. Common actions: status for current board status; processes for Linux-board process lists; flash-image for blocking TaishanPi dry-run or short image flashing; flash-start plus job-status for long real flashing progress; env-check for environment preflight; board-config for board/runtime config; capabilities or capability-context for knowledge; chip-probe/cpu-frequency/ddr-frequency/cpu-temperature for live chip data; wireless-probe/scan-wifi/scan-bluetooth/connect-wifi for wireless workflows; build-run for model-generated Linux-board C/C++ execution. action=apply-effect is only for simple solid/off board effects. Pass tool-specific arguments as a JSON object string in arguments_json."
+          "Use this dispatcher for DBT operations with Gemini. Common actions: status for current board status; processes for Linux-board process lists; flash-image for blocking TaishanPi dry-run or short image flashing; flash-start plus job-status for long real flashing progress; env-check for environment preflight; board-config for board/runtime config; capabilities or capability-context for knowledge; chip-probe/cpu-frequency/ddr-frequency/cpu-temperature for live chip data; wireless-probe/scan-wifi/scan-bluetooth/connect-wifi for wireless workflows; build-run for model-generated Linux-board C/C++ execution; qt-build-run for Qt/QtQuick projects that already exist in the current workspace. action=apply-effect is only for simple solid/off board effects. Pass tool-specific arguments as a JSON object string in arguments_json."
       }
       if (input.toolID === "dbt_current_board_status") {
         output.description =
@@ -4936,6 +4981,9 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       )
       output.system.push(
         "For run or execute requests, do not end with a raw source code block unless the user explicitly asked for code only. If live execution is available, continue to dbt_build_run_program.",
+      )
+      output.system.push(
+        "For TaishanPi Qt or QtQuick app requests, first create the Qt project files in the current workspace, then call dbt_qt_build_run_app or dbttool action=qt-build-run with project_dir. Do not use dbt_build_run_program for Qt apps, do not look for qmlscene, and do not guess qmake/CMake/linker paths manually.",
       )
       output.system.push(
         "Treat TaishanPi rgb_led as a capability contract, not as a built-in application feature. Use dbt_apply_effect/dbttool action=apply-effect only for simple atomic solid/off state. For timing, blinking, breathing, repeat counts, multi-step sequences, fade, or traffic-light style red/yellow/green cycling, generate self-contained C/C++ in the current workspace and call dbt_build_run_program with capability=rgb_led.",
