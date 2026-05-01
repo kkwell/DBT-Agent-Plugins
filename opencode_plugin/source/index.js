@@ -4133,6 +4133,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           rotate: tool.schema.string().optional(),
           scale: tool.schema.string().optional(),
           dtb_name: tool.schema.string().optional(),
+          build_mode: tool.schema.string().optional(),
           flash: tool.schema.string().optional(),
         },
         async execute(args) {
@@ -4153,6 +4154,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             rotate: asString(args.rotate),
             scale: asString(args.scale),
             dtb_name: asString(args.dtb_name),
+            build_mode: asString(args.build_mode),
             flash: boolValue(args.flash),
           }, { timeoutMs: 120000 }))
         },
