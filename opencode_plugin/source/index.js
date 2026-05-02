@@ -2664,6 +2664,7 @@ function dispatchTargetToolName(action) {
     ["apply-effect", "dbt_apply_effect"],
     ["build-run", "dbt_build_run_program"],
     ["qt-build-run", "dbt_qt_build_run_app"],
+    ["autostart", "dbt_configure_autostart"],
     ["check-plugin-update", "dbt_check_plugin_update"],
     ["update-plugin", "dbt_update_plugin"],
     ["rp2350-detect", "dbt_rp2350_detect"],
@@ -4526,6 +4527,47 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           return jsonText(result)
         },
       }),
+      dbt_configure_autostart: tool({
+        description: "Enable or disable an already deployed Linux-board app through the fixed DBT userdata autostart broker. Use app_type=qt with remote_runner_path returned by dbt_qt_build_run_app; use app_type=native with remote_binary_path set to remote_artifact_path returned by dbt_build_run_program. Do not create per-app systemd units.",
+        args: {
+          app_type: tool.schema.string(),
+          name: tool.schema.string().optional(),
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          remote_runner_path: tool.schema.string().optional(),
+          remote_binary_path: tool.schema.string().optional(),
+          remote_workdir: tool.schema.string().optional(),
+          remote_app_dir: tool.schema.string().optional(),
+          binary_name: tool.schema.string().optional(),
+          run_args: tool.schema.string().optional(),
+          enable: tool.schema.string().optional(),
+          start_now: tool.schema.string().optional(),
+          dry_run: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const appType = asString(args.app_type)
+          if (!appType) throw new Error("app_type is required")
+          const target = await resolveConnectedMutationTarget(args.board, args.variant, args.device_id)
+          const result = await localAgentTool("configure_autostart", {
+            board_id: target.board,
+            variant_id: target.variant,
+            device_id: asString(args.device_id) || target.device_id,
+            app_type: appType,
+            name: asString(args.name),
+            remote_runner_path: asString(args.remote_runner_path),
+            remote_binary_path: asString(args.remote_binary_path),
+            remote_workdir: asString(args.remote_workdir),
+            remote_app_dir: asString(args.remote_app_dir),
+            binary_name: asString(args.binary_name),
+            run_args: asString(args.run_args),
+            enable: args.enable === undefined ? true : boolValue(args.enable),
+            start_now: args.start_now === undefined ? true : boolValue(args.start_now),
+            dry_run: boolValue(args.dry_run),
+          }, { timeoutMs: 120000 })
+          return jsonText(result)
+        },
+      }),
       dbt_submit_insight_bundle: tool({
         description: "Store a standardized local insight bundle through dbt-agentd. The bundle stays on the local queue now; server upload is intentionally not enabled yet.",
         args: {
@@ -4703,6 +4745,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtapplyeffect", "dbt_apply_effect", "Apply a simple direct board effect. For TaishanPi rgb_led, use this only for atomic solid/off state. Do not use this for blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequences; generate C/C++ and use dbtbuildrun instead."],
     ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability. Use this for TaishanPi rgb_led blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequence requests."],
     ["dbtqtbuildrun", "dbt_qt_build_run_app", "Build, upload, and run a Qt/QtQuick project from the current workspace on TaishanPi."],
+    ["dbtautostart", "dbt_configure_autostart", "Enable or disable a deployed board app through the fixed DBT userdata autostart broker."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
   ]
@@ -4984,6 +5027,9 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       )
       output.system.push(
         "For TaishanPi Qt or QtQuick app requests, first create the Qt project files in the current workspace, then call dbt_qt_build_run_app or dbttool action=qt-build-run with project_dir. Do not use dbt_build_run_program for Qt apps, do not look for qmlscene, and do not guess qmake/CMake/linker paths manually.",
+      )
+      output.system.push(
+        "For board app autostart requests, call dbt_configure_autostart/dbtautostart after the app has been deployed. Use app_type=qt with remote_runner_path from dbt_qt_build_run_app, and app_type=native with remote_binary_path set to remote_artifact_path from dbt_build_run_program. Do not inspect init systems, do not create per-app systemd units, and do not write custom /etc/init.d app scripts.",
       )
       output.system.push(
         "Treat TaishanPi rgb_led as a capability contract, not as a built-in application feature. Use dbt_apply_effect/dbttool action=apply-effect only for simple atomic solid/off state. For timing, blinking, breathing, repeat counts, multi-step sequences, fade, or traffic-light style red/yellow/green cycling, generate self-contained C/C++ in the current workspace and call dbt_build_run_program with capability=rgb_led.",
