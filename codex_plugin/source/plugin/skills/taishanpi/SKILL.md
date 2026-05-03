@@ -35,5 +35,8 @@ description: Use for TaishanPi Linux-board work through DBT tools, including 1M-
 - Use `dbt_ensure_usbnet` when USB ECM host configuration is relevant.
 - For `进入 Loader`, `进入下载模式`, `loader mode`, or `download mode`, call `dbt_reboot_loader` directly. Do not route this through `dbt_get_capability_context`.
 - For normal reboot, or for returning from Loader USB back to the normal runtime state, call `dbt_reboot_device`.
-- For full factory/init image flashing, call `dbt_flash_image`. The installed runtime is responsible for moving between USB ECM runtime and Loader USB modes.
+- In TaishanPi work, phrases such as `下载初始化镜像`, `恢复初始镜像`, `烧录初始化镜像`, `刷写初始化镜像`, `恢复出厂镜像`, or `factory image` mean factory full-image burning to the board unless the user explicitly says "只下载到本机" or "只检查本地缓存".
+- For real factory/init image burning, first call `dbt_current_board_status`, then call `dbt_start_flash_image` with `image_source=factory` and `scope=all`, then call `dbt_get_job_status` with the returned `job_id` so the user sees progress. The installed runtime is responsible for moving between USB ECM runtime and Loader/Maskrom USB modes.
+- Use `dbt_flash_image` only for `dry_run=true`, short blocking validation, or when the user explicitly asks to wait for final completion in one blocking tool call.
+- Do not call `dbt_install_board_environment`, plugin-list tools, filesystem listing, or source checkout docs for factory/init image burning. Environment installation is only for local compiler/runtime environments.
 - For startup-logo, boot-logo, splash-logo, or logo replacement requests, call `dbt_update_logo` directly with the user-provided host image path plus requested `rotate`, `scale`, `build_mode`, and `flash` options. Do not inspect or edit boot workspace files, do not manually convert the image, and do not manually run `rebuild_boot.sh`; the runtime `update-logo` method owns image conversion, sizing, boot/resource rebuild, and optional boot flashing.

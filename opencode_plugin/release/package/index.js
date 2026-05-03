@@ -1350,7 +1350,7 @@ function normalizeUserDBTText(text) {
   }
   if (
     (trimmed.includes("初始化镜像") || trimmed.includes("出厂镜像") || trimmed.includes("factory")) &&
-    (trimmed.includes("烧录") || trimmed.includes("刷写") || trimmed.includes("flash"))
+    (trimmed.includes("下载") || trimmed.includes("恢复") || trimmed.includes("烧录") || trimmed.includes("刷写") || trimmed.includes("flash"))
   ) {
     const dryRun = trimmed.includes("dry") || trimmed.includes("验证") || trimmed.includes("不真实") || trimmed.includes("不要真实")
     const args = {
@@ -4011,7 +4011,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_install_board_environment: tool({
-        description: "Install the selected board development environment through local dbt-agentd. Use this only when the user explicitly asks to install or prepare the development environment. For RP2350-family boards such as ColorEasyPICO2 and RaspberryPiPico2W, profile can be minimal_runtime or full_build.",
+        description: "Install the selected board development environment through local dbt-agentd. Use this only when the user explicitly asks to install or prepare the compiler/runtime environment. Do not use this for initialization image download, factory image flashing, restore initial image, or board image burning; use dbtflashstart/dbtflashimage with image_source=factory and scope=all instead. For RP2350-family boards such as ColorEasyPICO2 and RaspberryPiPico2W, profile can be minimal_runtime or full_build.",
         args: {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
@@ -4730,7 +4730,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtcapabilitycontext", "dbt_get_capability_context", "Get detailed capability implementation context. Pass arguments_json {\"capability\":\"rgb_led\"}; request=rgb_led is also accepted and will be mapped to capability=rgb_led."],
     ["dbtboardconfig", "dbt_get_board_config", "Get board and runtime configuration."],
     ["dbtenvcheck", "dbt_check_board_environment", "Check whether the board environment is installed and ready."],
-    ["dbtenvinstall", "dbt_install_board_environment", "Install or repair a board environment through local dbt-agentd."],
+    ["dbtenvinstall", "dbt_install_board_environment", "Install or repair a local compiler/runtime board environment through local dbt-agentd. Do not use for factory/init image flashing or '下载初始化镜像'."],
     ["dbtusbnet", "dbt_ensure_usbnet", "Ensure host USB network configuration for the connected board."],
     ["dbtupdatelogo", "dbt_update_logo", "Update the board startup logo from a workspace image."],
     ["dbtchipprobe", "dbt_probe_chip_control", "Probe live chip-control data such as CPU, DDR, temperature, memory, or storage."],

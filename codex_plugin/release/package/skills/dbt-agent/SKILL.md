@@ -50,7 +50,10 @@ Supported families:
 - For Linux-board process-list requests such as `当前开发板有哪些进程`, call `dbt_list_board_processes` directly instead of using host shell, SSH narration, or capability lookups.
 - For TaishanPi or other Linux-board requests to enter Loader/download mode, call `dbt_reboot_loader` directly. Do not call capability summary/context tools to discover this path.
 - For normal board reboot requests, including returning a Linux board from Loader USB to the normal runtime state, call `dbt_reboot_device` directly.
-- For full TaishanPi image flashing, call `dbt_flash_image` and let `dbt-agentd`/the installed runtime handle running-vs-Loader state transitions.
+- In DBT/TaishanPi context, user phrases such as `下载初始化镜像`, `恢复初始镜像`, `烧录初始化镜像`, `刷写初始化镜像`, `恢复出厂镜像`, or `factory image` mean factory full-image burning to the board unless the user explicitly says "只下载到本机" or "只检查本地缓存".
+- For real TaishanPi initialization/factory full-image burning, first call `dbt_current_board_status`, then call `dbt_start_flash_image` with `image_source=factory` and `scope=all`, then call `dbt_get_job_status` with the returned `job_id` to show progress. Let `dbt-agentd`/the installed runtime handle running-vs-Loader/Maskrom transitions.
+- Use `dbt_flash_image` only for `dry_run=true`, short blocking validation, or when the user explicitly asks to wait for final completion in one blocking tool call.
+- Do not call `dbt_install_board_environment`, `dbt_list_installed_board_plugins`, file listing, or repository search for initialization-image burning. `dbt_install_board_environment` is only for installing/repairing local compiler/runtime environments.
 - For startup-logo, boot-logo, splash-logo, or logo replacement requests, call `dbt_update_logo` directly with the user-provided host image path plus requested `rotate`, `scale`, `build_mode`, and `flash` options. Do not inspect boot workspace files, do not manually run `sips`, `magick`, `convert`, `rebuild_boot.sh`, or `dbt_flash_image`; the runtime `update-logo` method owns image conversion, sizing, boot/resource rebuild, and optional boot flashing.
 - Do not invent Pico SDK include paths, link libraries, or support headers. Use DBT capability context exactly.
 
