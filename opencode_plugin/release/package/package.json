@@ -1,6 +1,6 @@
 {
   "name": "dbt-agent",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "Embed Labs OpenCode plugin for development-board-toolchain board control, capability planning, flashing, and environment tooling.",
   "main": "./index.js",
   "type": "module",
