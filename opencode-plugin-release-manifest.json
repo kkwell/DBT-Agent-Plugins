@@ -1,12 +1,12 @@
 {
   "name": "Embed Labs OpenCode Plugin",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "protocol_version": 1,
   "release_channel": "stable",
   "repository_url": "https://github.com/kkwell/DBT-Agent-Plugins.git",
   "installer_url": "https://raw.githubusercontent.com/kkwell/DBT-Agent-Plugins/main/release/install-opencode.sh",
-  "runtime_archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.24/development-board-toolchain-runtime-1.0.24.tar.gz",
-  "agent_archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.24/dbt-agentd-macos-arm64-1.0.24.tar.gz",
+  "runtime_archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.25/development-board-toolchain-runtime-1.0.25.tar.gz",
+  "agent_archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.25/dbt-agentd-macos-arm64-1.0.25.tar.gz",
   "platforms": {
     "opencode": {
       "package_name": "dbt-agent",

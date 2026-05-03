@@ -2226,32 +2226,46 @@ async function runRP2350Job(action, args = {}, options = {}) {
 function summarizeFlashImageJobPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload
   const job = payload.job && typeof payload.job === "object" ? payload.job : {}
+  const task = payload.task && typeof payload.task === "object" ? payload.task : {}
   const request = job.request && typeof job.request === "object" ? job.request : {}
   const result = job.result && typeof job.result === "object" ? job.result : {}
   const ok = job.ok === true || result.ok === true
   const progress = normalizeJobProgress(result.progress ?? job.progress ?? payload.progress)
+  const progressPercent = normalizeJobProgressPercent(payload, result, job, task, progress)
+  const progressBar = normalizeJobProgressBar(payload, result, job, task, progressPercent)
+  const jobID = asString(job.job_id || payload.job_id || task.id)
+  const state = asString(result.state || job.state || payload.state || task.status)
+  const statusLine = normalizeJobStatusLine(payload, result, job, task, {
+    jobID,
+    state,
+    progressPercent,
+    progressBar,
+  })
   const summary = asString(
-    result.summary_for_user ||
+    payload.summary_for_user ||
+      result.summary_for_user ||
+      statusLine ||
       job.output_tail ||
       job.failure_summary ||
       result.output ||
-      result.error ||
-      payload.summary_for_user
+      result.error
   )
 
   return {
     ok,
-    job_id: asString(job.job_id),
+    job_id: jobID,
     action: "flash_image",
     board_id: asString(result.board_id || request.board_id),
     variant_id: asString(result.variant_id || request.variant_id),
     device_id: asString(result.device_id || request.device_id),
-    state: asString(result.state || job.state),
+    state,
     status_label: asString(job.status_label),
     progress,
-    progress_percent: typeof progress === "number" ? Math.round(progress * 100) : undefined,
+    progress_percent: progressPercent,
+    progress_bar: progressBar,
     progress_stage: asString(result.progress_stage || job.progress_stage),
     progress_text: asString(result.progress_text || job.progress_text),
+    status_line: statusLine,
     summary_for_user: summary,
     image_source: asString(result.image_source || request.image_source),
     scope: asString(result.scope || request.scope),
@@ -2272,9 +2286,58 @@ function normalizeJobProgress(value) {
   return Math.max(0, Math.min(1, parsed))
 }
 
+function normalizeJobProgressPercent(...values) {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const nested = normalizeJobProgressPercent(value.progress_percent)
+      if (typeof nested === "number") return nested
+      continue
+    }
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      if (parsed <= 1) return Math.round(Math.max(0, Math.min(1, parsed)) * 100)
+      return Math.round(Math.max(0, Math.min(100, parsed)))
+    }
+  }
+  return undefined
+}
+
+function normalizeJobProgressBar(payload, result, job, task, progressPercent) {
+  const existing = asString(
+    payload?.progress_bar ||
+      result?.progress_bar ||
+      job?.progress_bar ||
+      task?.progress_bar
+  )
+  if (existing) return existing
+  if (typeof progressPercent !== "number") return undefined
+  const width = 20
+  const filled = Math.max(0, Math.min(width, Math.round((progressPercent / 100) * width)))
+  return `[${"#".repeat(filled)}${"-".repeat(width - filled)}]`
+}
+
+function normalizeJobStatusLine(payload, result, job, task, fallback = {}) {
+  const existing = asString(
+    payload?.status_line ||
+      result?.status_line ||
+      job?.status_line ||
+      task?.status_line
+  )
+  if (existing) return existing
+  const jobID = asString(fallback.jobID || job?.job_id || payload?.job_id || task?.id)
+  const state = asString(fallback.state || result?.state || job?.state || payload?.state || task?.status || "unknown")
+  const stage = asString(result?.progress_stage || job?.progress_stage || payload?.progress_stage || task?.progress_stage || state)
+  const text = asString(result?.progress_text || job?.progress_text || payload?.progress_text || task?.progress_text || "状态更新中")
+  const progressPercent = fallback.progressPercent
+  const progressBar = fallback.progressBar || normalizeJobProgressBar(payload, result, job, task, progressPercent)
+  if (typeof progressPercent !== "number" || !progressBar) return ""
+  return `任务 ${jobID}：${progressPercent}% ${progressBar} | ${state} | ${stage} | ${text}`
+}
+
 function summarizeAgentJobStatusPayload(payload, options = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload
   const job = payload.job && typeof payload.job === "object" ? payload.job : {}
+  const task = payload.task && typeof payload.task === "object" ? payload.task : {}
   const request = job.request && typeof job.request === "object" ? job.request : {}
   const result = job.result && typeof job.result === "object" ? job.result : {}
   const requestPayload =
@@ -2285,30 +2348,42 @@ function summarizeAgentJobStatusPayload(payload, options = {}) {
   const terminal = ["finished", "failed", "error", "cancelled"].includes(state)
   const failed = ["failed", "error", "cancelled"].includes(state)
   const progress = normalizeJobProgress(result.progress ?? job.progress ?? payload.progress)
+  const progressPercent = normalizeJobProgressPercent(payload, result, job, task, progress)
+  const progressBar = normalizeJobProgressBar(payload, result, job, task, progressPercent)
+  const jobID = asString(job.job_id || payload?.task?.id || payload?.job_id || options.jobID)
+  const statusLine = normalizeJobStatusLine(payload, result, job, task, {
+    jobID,
+    state,
+    progressPercent,
+    progressBar,
+  })
   const outputTail = asString(result.output_tail || job.output_tail || payload.output_tail)
   const failureSummary = asString(result.failure_summary || job.failure_summary || payload.failure_summary)
   const summary = asString(
-    result.summary_for_user ||
+    payload.summary_for_user ||
+      result.summary_for_user ||
       job.summary_for_user ||
+      statusLine ||
       outputTail ||
       failureSummary ||
       result.output ||
       result.error ||
-      payload.summary_for_user ||
       payload.summary
   )
 
   return {
     ok: failed ? false : payload.ok !== false,
-    job_id: asString(job.job_id || payload?.task?.id || options.jobID),
+    job_id: jobID,
     action: asString(options.action || result.action || request.action || job.action),
     state,
     terminal,
     status_label: asString(job.status_label || result.status_label),
     progress,
-    progress_percent: typeof progress === "number" ? Math.round(progress * 100) : undefined,
+    progress_percent: progressPercent,
+    progress_bar: progressBar,
     progress_stage: asString(result.progress_stage || job.progress_stage),
     progress_text: asString(result.progress_text || job.progress_text),
+    status_line: statusLine,
     summary_for_user: summary,
     output_tail: excerptText(outputTail),
     failure_summary: excerptText(failureSummary),
@@ -4105,7 +4180,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_start_flash_image: tool({
-        description: "Start an installed factory or custom image flashing job through local dbt-agentd and return immediately with job_id and initial progress. Use this for long real flashing operations so progress can be queried with dbt_get_job_status.",
+        description: "Start an installed factory or custom image flashing job through local dbt-agentd and return immediately with job_id, progress_percent, progress_bar, status_line, progress_stage, and progress_text. Use this for long real flashing operations so progress can be queried with dbt_get_job_status.",
         args: {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
@@ -4122,7 +4197,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_get_job_status: tool({
-        description: "Query a local dbt-agentd long-running job by job_id. Use after dbt_start_flash_image to show current flashing progress, output_tail, terminal state, and failure summary.",
+        description: "Query a local dbt-agentd long-running job by job_id. Use after dbt_start_flash_image and answer the user with status_line so they see progress_percent, progress_bar, state, stage, and text instead of a generic polling message.",
         args: {
           job_id: tool.schema.string(),
         },
