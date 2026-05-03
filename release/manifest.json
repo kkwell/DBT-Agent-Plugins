@@ -1,6 +1,6 @@
 {
   "name": "DBT-Agent-Plugins",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "protocol_version": 1,
   "release_entry": "release/install.sh",
   "github_releases": "https://github.com/kkwell/DBT-Agent-Plugins/releases",
@@ -14,14 +14,14 @@
   },
   "release_assets": {
     "opencode": {
-      "root_dir": "DBT-Agent-OpenCode-v1.0.21",
-      "zip": "DBT-Agent-OpenCode-v1.0.21.zip",
-      "tar_gz": "DBT-Agent-OpenCode-v1.0.21.tar.gz"
+      "root_dir": "DBT-Agent-OpenCode-v1.0.22",
+      "zip": "DBT-Agent-OpenCode-v1.0.22.zip",
+      "tar_gz": "DBT-Agent-OpenCode-v1.0.22.tar.gz"
     },
     "codex": {
-      "root_dir": "DBT-Agent-Codex-v1.0.21",
-      "zip": "DBT-Agent-Codex-v1.0.21.zip",
-      "tar_gz": "DBT-Agent-Codex-v1.0.21.tar.gz"
+      "root_dir": "DBT-Agent-Codex-v1.0.22",
+      "zip": "DBT-Agent-Codex-v1.0.22.zip",
+      "tar_gz": "DBT-Agent-Codex-v1.0.22.tar.gz"
     }
   },
   "platforms": {
@@ -40,11 +40,16 @@
     "policy": "Large board-family development environments are published separately. DBT tools should check the installed environment first and prompt the user to manually download/install the missing family package before model-driven build work continues.",
     "families": {
       "TaishanPi": {
-        "boards": ["TaishanPi"],
+        "boards": [
+          "TaishanPi"
+        ],
         "package_id": "TaishanPi"
       },
       "RP2350": {
-        "boards": ["ColorEasyPICO2", "RaspberryPiPico2W"],
+        "boards": [
+          "ColorEasyPICO2",
+          "RaspberryPiPico2W"
+        ],
         "package_id": "RP2350"
       }
     }
