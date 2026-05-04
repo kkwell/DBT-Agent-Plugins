@@ -53,5 +53,28 @@
         "package_id": "RP2350"
       }
     }
+  },
+  "board_environments": {
+    "RP2350RuntimeCore": {
+      "profiles": {
+        "minimal_runtime": {
+          "archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.25/dbt-rp2350-runtime-core-1.0.25.tar.gz"
+        }
+      }
+    },
+    "RP2350SDKCore": {
+      "profiles": {
+        "sdk_core": {
+          "archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.25/dbt-rp2350-sdk-core-1.0.25.tar.gz"
+        }
+      }
+    },
+    "RP2350BuildOverlay": {
+      "profiles": {
+        "full_build": {
+          "archive_url": "https://github.com/kkwell/DBT-Agent-Plugins/releases/download/v1.0.25/dbt-rp2350-full-build-1.0.25.tar.gz"
+        }
+      }
+    }
   }
 }

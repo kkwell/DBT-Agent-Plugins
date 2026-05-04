@@ -120,6 +120,11 @@ OPENCODE_ARCHIVE="DBT-Agent-OpenCode-v${VERSION}"
 CODEX_ARCHIVE="DBT-Agent-Codex-v${VERSION}"
 RUNTIME_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/runtime/development-board-toolchain-runtime-${VERSION}.tar.gz"
 AGENT_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/agent/dbt-agentd-macos-arm64-${VERSION}.tar.gz"
+BOARD_ENV_ARCHIVE_PATHS=(
+  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350RuntimeCore/dbt-rp2350-runtime-core-${VERSION}.tar.gz"
+  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350SDKCore/dbt-rp2350-sdk-core-${VERSION}.tar.gz"
+  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350BuildOverlay/dbt-rp2350-full-build-${VERSION}.tar.gz"
+)
 
 build_platform_archive \
   "opencode" \
@@ -148,6 +153,11 @@ build_platform_archive \
   if [[ -f "${AGENT_ARCHIVE_PATH}" ]]; then
     (cd "$(dirname "${AGENT_ARCHIVE_PATH}")" && shasum -a 256 "$(basename "${AGENT_ARCHIVE_PATH}")") >> SHA256SUMS.txt
   fi
+  for archive_path in "${BOARD_ENV_ARCHIVE_PATHS[@]}"; do
+    if [[ -f "${archive_path}" ]]; then
+      (cd "$(dirname "${archive_path}")" && shasum -a 256 "$(basename "${archive_path}")") >> SHA256SUMS.txt
+    fi
+  done
 )
 
 cat > "${DIST_ROOT}/RELEASE_NOTES_v${VERSION}.md" <<EOF
@@ -161,6 +171,9 @@ Assets:
 - ${CODEX_ARCHIVE}.tar.gz
 - development-board-toolchain-runtime-${VERSION}.tar.gz
 - dbt-agentd-macos-arm64-${VERSION}.tar.gz
+- dbt-rp2350-runtime-core-${VERSION}.tar.gz
+- dbt-rp2350-sdk-core-${VERSION}.tar.gz
+- dbt-rp2350-full-build-${VERSION}.tar.gz
 
 Each archive is platform-specific and includes a top-level \`install.sh\` and \`install.command\`.
 Users only need to download the matching platform archive, extract it, and run the top-level installer.

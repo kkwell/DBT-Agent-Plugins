@@ -31,6 +31,11 @@ DIST_ROOT="${REPO_ROOT}/dist"
 NOTES_FILE="${DIST_ROOT}/RELEASE_NOTES_v${VERSION}.md"
 RUNTIME_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/runtime/development-board-toolchain-runtime-${VERSION}.tar.gz"
 AGENT_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/agent/dbt-agentd-macos-arm64-${VERSION}.tar.gz"
+BOARD_ENV_ARCHIVE_PATHS=(
+  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350RuntimeCore/dbt-rp2350-runtime-core-${VERSION}.tar.gz"
+  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350SDKCore/dbt-rp2350-sdk-core-${VERSION}.tar.gz"
+  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350BuildOverlay/dbt-rp2350-full-build-${VERSION}.tar.gz"
+)
 ASSETS=(
   "${DIST_ROOT}/DBT-Agent-OpenCode-v${VERSION}.zip"
   "${DIST_ROOT}/DBT-Agent-OpenCode-v${VERSION}.tar.gz"
@@ -45,6 +50,11 @@ fi
 if [[ -f "${AGENT_ARCHIVE_PATH}" ]]; then
   ASSETS+=("${AGENT_ARCHIVE_PATH}")
 fi
+for archive_path in "${BOARD_ENV_ARCHIVE_PATHS[@]}"; do
+  if [[ -f "${archive_path}" ]]; then
+    ASSETS+=("${archive_path}")
+  fi
+done
 
 for asset in "${ASSETS[@]}"; do
   if [[ ! -f "${asset}" ]]; then
