@@ -144,8 +144,23 @@ Any future Codex-specific failure reporting should still route through `dbt-agen
   - release metadata
 - `docs/installation.md`
   - operator install instructions
+- `docs/official-directory-submission.md`
+  - official OpenAI directory submission path, current blockers, and review checklist
+- `submission/app-directory-listing.json`
+  - draft listing metadata for Apps SDK review and Codex Plugin Directory preparation
 - `../scripts/build_release_archives.sh`
   - build end-user release archives with top-level install entry
+
+## Official directory readiness
+
+Current OpenAI distribution has two tracks:
+
+- repo/personal marketplace distribution, which this project supports now through `../.agents/plugins/marketplace.json`
+- official public directory distribution, which currently requires submitting an Apps SDK app through the OpenAI Platform Dashboard; after approval, OpenAI creates the Codex plugin listing
+
+For the detailed submission workflow, use:
+
+- [docs/official-directory-submission.md](./docs/official-directory-submission.md)
 
 ## Maintenance rule
 

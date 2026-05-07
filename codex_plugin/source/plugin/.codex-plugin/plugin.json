@@ -29,8 +29,8 @@
       "Hardware Control"
     ],
     "websiteURL": "https://embedboard.com/",
-    "privacyPolicyURL": "https://github.com/kkwell/DBT-Agent-Plugins",
-    "termsOfServiceURL": "https://github.com/kkwell/DBT-Agent-Plugins",
+    "privacyPolicyURL": "https://embedboard.com/privacy",
+    "termsOfServiceURL": "https://embedboard.com/terms",
     "defaultPrompt": [
       "查看当前开发板状态",
       "读取 Pico 2 W 的最小构建配置",

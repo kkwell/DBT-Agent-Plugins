@@ -65,6 +65,17 @@ Detailed installation guides:
 
 - [OpenCode installation](./opencode_plugin/docs/installation.md)
 - [Codex installation](./codex_plugin/docs/installation.md)
+- [Codex official directory submission plan](./codex_plugin/docs/official-directory-submission.md)
+
+Codex repo marketplace install:
+
+```bash
+codex plugin marketplace add https://github.com/kkwell/DBT-Agent-Plugins.git --ref v1.0.25
+```
+
+This exposes the `Embed Labs` marketplace entry from `.agents/plugins/marketplace.json`.
+Official public directory distribution is separate: OpenAI currently creates Codex plugin
+directory entries from approved Apps SDK app submissions.
 
 Release entry for end users:
 
