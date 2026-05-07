@@ -3121,7 +3121,7 @@ function summarizeConnectedDevicesPayload(payload) {
 
 async function getStatusWithAutoRepair() {
   try {
-    return sanitizeStatusPayload(await localAgentJSON("/v1/status/live", { timeoutMs: 6000 }))
+    return sanitizeStatusPayload(await localAgentJSON("/v1/status/live?repair=1", { timeoutMs: 9000 }))
   } catch (liveError) {
     const cached = await tryLocalAgentJSON("/v1/status/summary", { timeoutMs: 2500 })
     if (cached && typeof cached === "object" && !Array.isArray(cached)) {
