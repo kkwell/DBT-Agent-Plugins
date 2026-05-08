@@ -122,7 +122,6 @@ RUNTIME_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/runtime/develop
 AGENT_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/agent/dbt-agentd-macos-arm64-${VERSION}.tar.gz"
 BOARD_ENV_ARCHIVE_PATHS=(
   "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350RuntimeCore/dbt-rp2350-runtime-core-${VERSION}.tar.gz"
-  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350SDKCore/dbt-rp2350-sdk-core-${VERSION}.tar.gz"
   "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350BuildOverlay/dbt-rp2350-full-build-${VERSION}.tar.gz"
 )
 
@@ -172,8 +171,10 @@ Assets:
 - development-board-toolchain-runtime-${VERSION}.tar.gz
 - dbt-agentd-macos-arm64-${VERSION}.tar.gz
 - dbt-rp2350-runtime-core-${VERSION}.tar.gz
-- dbt-rp2350-sdk-core-${VERSION}.tar.gz
 - dbt-rp2350-full-build-${VERSION}.tar.gz
+
+RP2350 SDKCore is unchanged in this release and is reused through the release manifest's
+published archive URL instead of being re-uploaded as a duplicate large asset.
 
 Each archive is platform-specific and includes a top-level \`install.sh\` and \`install.command\`.
 Users only need to download the matching platform archive, extract it, and run the top-level installer.

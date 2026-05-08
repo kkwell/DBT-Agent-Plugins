@@ -33,7 +33,6 @@ RUNTIME_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/runtime/develop
 AGENT_ARCHIVE_PATH="${PROJECT_ROOT}/dbt-agentd/product_release/agent/dbt-agentd-macos-arm64-${VERSION}.tar.gz"
 BOARD_ENV_ARCHIVE_PATHS=(
   "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350RuntimeCore/dbt-rp2350-runtime-core-${VERSION}.tar.gz"
-  "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350SDKCore/dbt-rp2350-sdk-core-${VERSION}.tar.gz"
   "${PROJECT_ROOT}/dbt-agentd/product_release/board_environments/RP2350BuildOverlay/dbt-rp2350-full-build-${VERSION}.tar.gz"
 )
 ASSETS=(
