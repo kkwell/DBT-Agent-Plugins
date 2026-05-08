@@ -2423,12 +2423,17 @@ async function createFlashImageJob(args = {}, options = {}) {
     variant_id: target.variant || requestedVariant,
     device_id: target.device_id,
     image_source: asString(args.image_source) || "factory",
-    scope: asString(args.scope) || "all",
+    scope: asString(args.scope) || (asString(args.host_image_file || args.image_file) ? "raw" : "all"),
     request_context: requestContext,
     dry_run: boolValue(args.dry_run),
   }
   const hostImageDir = resolveWorkspacePath(args.host_image_dir)
   if (hostImageDir) payload.host_image_dir = hostImageDir
+  const hostImageFile = resolveWorkspacePath(args.host_image_file || args.image_file)
+  if (hostImageFile) {
+    payload.host_image_file = hostImageFile
+    if (!asString(args.scope)) payload.scope = "raw"
+  }
   const buildMode = asString(args.build_mode)
   if (buildMode) payload.build_mode = buildMode
   const mode = asString(args.mode)
@@ -4189,7 +4194,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_flash_image: tool({
-        description: "Flash the current board with an installed factory or custom image through local dbt-agentd. Use this for TaishanPi initialization image flashing; it handles running/download-mode detection and delegates the actual flashing workflow to the installed runtime. Do not inspect dbtctl help or run shell flashing commands.",
+        description: "Flash the current board with an installed factory/custom partition image set or one raw .img file through local dbt-agentd. Use this for TaishanPi initialization image flashing or direct .img burning; it handles running/download-mode detection and delegates the actual flashing workflow to the installed runtime. For a single .img file, pass host_image_file and scope=raw. Do not inspect dbtctl help or run shell flashing commands.",
         args: {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
@@ -4198,6 +4203,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           scope: tool.schema.string().optional(),
           build_mode: tool.schema.string().optional(),
           host_image_dir: tool.schema.string().optional(),
+          host_image_file: tool.schema.string().optional(),
+          image_file: tool.schema.string().optional(),
           mode: tool.schema.string().optional(),
           dry_run: tool.schema.string().optional(),
         },
@@ -4208,7 +4215,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         },
       }),
       dbt_start_flash_image: tool({
-        description: "Start an installed factory or custom image flashing job through local dbt-agentd and return immediately with job_id, progress_percent, progress_bar, status_line, progress_stage, and progress_text. Use this for long real flashing operations so progress can be queried with dbt_get_job_status.",
+        description: "Start an installed factory/custom partition image set or raw .img flashing job through local dbt-agentd and return immediately with job_id, progress_percent, progress_bar, status_line, progress_stage, and progress_text. Use this for long real flashing operations, including direct .img burning with host_image_file and scope=raw, so progress can be queried with dbt_get_job_status.",
         args: {
           board: tool.schema.string().optional(),
           variant: tool.schema.string().optional(),
@@ -4217,6 +4224,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           scope: tool.schema.string().optional(),
           build_mode: tool.schema.string().optional(),
           host_image_dir: tool.schema.string().optional(),
+          host_image_file: tool.schema.string().optional(),
+          image_file: tool.schema.string().optional(),
           mode: tool.schema.string().optional(),
           dry_run: tool.schema.string().optional(),
         },
@@ -5007,8 +5016,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
 
   const aliasSpecs = [
     ["dbtlistdevices", "dbt_list_connected_devices", "List connected DBT development boards."],
-    ["dbtflashimage", "dbt_flash_image", "Flash a factory or custom image through local dbt-agentd. For TaishanPi initialization, use arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}; add \"dry_run\":\"true\" only for validation without real flashing."],
-    ["dbtflashstart", "dbt_start_flash_image", "Start a long factory or custom image flashing job and return job_id immediately for progress polling."],
+    ["dbtflashimage", "dbt_flash_image", "Flash a factory/custom partition image set or one raw .img through local dbt-agentd. For TaishanPi initialization, use arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}; for a single .img file use {\"scope\":\"raw\",\"host_image_file\":\"/path/image.img\"}; add \"dry_run\":\"true\" only for validation without real flashing."],
+    ["dbtflashstart", "dbt_start_flash_image", "Start a long factory/custom image or raw .img flashing job and return job_id immediately for progress polling."],
     ["dbtjobstatus", "dbt_get_job_status", "Query a local dbt-agentd job by job_id and show progress, output tail, terminal state, or failure summary."],
     ["dbtprepare", "dbt_prepare_request", "Resolve a DBT board request before capability or execution planning."],
     ["dbtcapabilities", "dbt_get_board_capabilities", "Get capability summaries for the current or requested board."],
@@ -5327,7 +5336,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "If the user asks to run, execute, deploy, burn, or flash something on the connected board, do not stop after drafting code or explaining the plan. Continue to the DBT execution tool that performs the action unless preflight or live availability blocks it.",
       )
       output.system.push(
-        "For TaishanPi initialization-image burning or full-board image flashing, use dbt_start_flash_image with image_source=factory and scope=all for long real flashing so progress can be polled with dbt_get_job_status. Use dbt_flash_image only for blocking dry-run or when the user explicitly wants to wait for completion in one tool call. Do not call dbtctl --help, do not execute dbtctl through host bash, and do not use source-checkout development paths for board operations.",
+        "For TaishanPi initialization-image burning or full-board image flashing, use dbt_start_flash_image with image_source=factory and scope=all for long real flashing so progress can be polled with dbt_get_job_status. If the user provides one complete .img file, use dbt_start_flash_image with scope=raw and host_image_file; the runtime writes it from LBA 0 through rkdeveloptool wl and still owns Loader/Maskrom transitions. Use dbt_flash_image only for blocking dry-run or when the user explicitly wants to wait for completion in one tool call. Do not call dbtctl --help, do not execute dbtctl through host bash, and do not use source-checkout development paths for board operations.",
       )
       output.system.push(
         "The OpenCode plugin is an installed-runtime client. Board control, flashing, status, and probes must go through local dbt-agentd and files under ~/Library/development-board-toolchain, not source checkout paths.",

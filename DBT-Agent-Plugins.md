@@ -28,7 +28,7 @@ Key capabilities:
 - board config and capability context lookup
 - local runtime execution through the shared Development Board Toolchain runtime
 - local build / deploy / log collection workflows
-- TaishanPi/Linux-board factory image flashing through `dbt_flash_image` and non-blocking `dbt_start_flash_image` + `dbt_get_job_status`
+- TaishanPi/Linux-board factory image flashing and direct raw `.img` burning through `dbt_flash_image` and non-blocking `dbt_start_flash_image` + `dbt_get_job_status`
 - plugin update checks and runtime-aware installation
 - structured tool-failure reporting through `dbt-agentd`
 

@@ -80,6 +80,8 @@ Image flashing has two OpenCode paths:
   - non-blocking path for long real image downloads and full-board flashing; the start tool returns
     `job_id` immediately, and status polling returns `progress_percent`, `progress_stage`,
     `progress_text`, `status_label`, `output_tail`, terminal state, and failure summary.
+  - direct raw `.img` burning uses the same job path with `scope=raw` and
+    `host_image_file=/path/to/image.img`; the runtime writes it from LBA 0.
 
 For TaishanPi initialization-image requests, OpenCode should use the non-blocking path for real
 flashing with `image_source=factory` and `scope=all` unless the user asks for a different image source
