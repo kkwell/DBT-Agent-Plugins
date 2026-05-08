@@ -8,6 +8,7 @@ description: Use for TaishanPi Linux-board work through DBT tools, including 1M-
 ## Rules
 
 - When the user explicitly invokes `@dbt-agent`, `[@dbt-agent](plugin://dbt-agent@plugins)`, or the Embed Labs plugin for TaishanPi work, treat the message as a DBT tool intent and prefer MCP tools over shell commands.
+- For plugin/runtime update requests such as `更新插件`, `升级插件`, `更新 Embed Labs`, `检查插件更新`, or `update plugin`, do not inspect the workspace, read plugin files, probe `dbtctl`, or run shell commands. If the user asks to update, call `dbt_update_plugin` directly; if the user only asks whether an update exists, call `dbt_check_plugin_update`.
 - If the user writes a DBT MCP tool name such as `dbt_current_board_status`, including with a leading `$`, backticks, or command-like wording, call the matching MCP tool directly. Never run DBT MCP tool names through zsh.
 - If the board is already identified and the task is capability lookup or code generation, use `dbt_get_capability_context` and `dbt_get_board_config` directly instead of re-checking status first.
 - For direct live-board status requests such as `开发板状态`, `当前开发板状态`, or `查看当前开发板状态`, call the MCP tool `dbt_current_board_status` immediately as the first action; do not run `dbtctl status`, shell commands, web search, workspace probes, memory-file searches, or repository/skill-file reads before that MCP tool.

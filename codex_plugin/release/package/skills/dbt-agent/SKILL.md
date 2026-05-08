@@ -18,6 +18,7 @@ Supported families:
 ## Rules
 
 - When the user explicitly invokes `@dbt-agent`, `[@dbt-agent](plugin://dbt-agent@plugins)`, or the Embed Labs plugin, treat the message as a DBT tool intent and prefer MCP tools over shell commands.
+- For plugin/runtime update requests such as `更新插件`, `升级插件`, `更新 Embed Labs`, `检查插件更新`, or `update plugin`, do not inspect the workspace, read plugin files, probe `dbtctl`, or run shell commands. If the user asks to update, call `dbt_update_plugin` directly; if the user only asks whether an update exists, call `dbt_check_plugin_update`.
 - If the user writes a DBT MCP tool name such as `dbt_current_board_status`, including with a leading `$`, backticks, or command-like wording, call the matching MCP tool directly. Never run DBT MCP tool names through zsh, and never report `command not found` as a board result when the MCP server is available.
 - For direct live-board requests such as `开发板状态`, `当前开发板状态`, `查看当前开发板状态`, `board status`, `what board is connected`, or `which device is active`, call the MCP tool `dbt_current_board_status` immediately as the first action.
 - Do not run `dbtctl status`, shell commands, web search, workspace probes, memory-file searches, or repository/skill-file reads before `dbt_current_board_status` when that MCP tool is available.

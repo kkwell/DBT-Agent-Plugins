@@ -70,7 +70,7 @@ Detailed installation guides:
 Codex repo marketplace install:
 
 ```bash
-codex plugin marketplace add https://github.com/kkwell/DBT-Agent-Plugins.git --ref v1.0.27
+codex plugin marketplace add https://github.com/kkwell/DBT-Agent-Plugins.git --ref v1.0.28
 ```
 
 This exposes the `Embed Labs` marketplace entry from `.agents/plugins/marketplace.json`.
