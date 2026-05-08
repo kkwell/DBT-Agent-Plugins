@@ -873,6 +873,39 @@ async function checkPluginUpdateNow(toolkitRoot) {
   return nextState
 }
 
+async function getPluginVersions(options = {}) {
+  const toolkitRoot = resolveToolkitRoot()
+  const installRoot = inferInstallRoot(toolkitRoot)
+  const manifestSource = asString(options.source) || resolveUpdateManifestSource()
+  const localVersion = readLocalUpdateVersion(installRoot) || "unknown"
+  let manifest = null
+  let manifestError = ""
+  try {
+    manifest = await requestJSON(manifestSource, { timeoutMs: 4000 })
+  } catch (error) {
+    manifestError = error && error.message ? error.message : String(error)
+  }
+  const remoteVersion = asString(manifest && manifest.version)
+  const updateAvailable = Boolean(remoteVersion && remoteVersion !== localVersion)
+  return {
+    ok: !manifestError && Boolean(remoteVersion),
+    toolkit_root: installRoot,
+    update_manifest_url: manifestSource,
+    repository_url: asString(manifest && manifest.repository_url),
+    local_version: localVersion,
+    remote_version: remoteVersion || "",
+    latest_version: remoteVersion || "",
+    update_available: updateAvailable,
+    release_channel: asString(manifest && manifest.release_channel),
+    manifest_error: manifestError,
+    summary_for_user: remoteVersion
+      ? updateAvailable
+        ? `本地 Embed Labs/DBT 版本：${localVersion}，服务器最新版本：${remoteVersion}，可更新。`
+        : `本地 Embed Labs/DBT 版本：${localVersion}，服务器最新版本：${remoteVersion}，已是最新。`
+      : `本地 Embed Labs/DBT 版本：${localVersion}，暂未获取到服务器最新版本。`,
+  }
+}
+
 function manifestBaseDirectory(source) {
   const text = asString(source)
   if (!text) return ""
@@ -2719,6 +2752,11 @@ function normalizeDispatchAction(value) {
     ["preview-screenshot", "qml-preview-capture"],
     ["qml-preview-stop", "qml-preview-stop"],
     ["preview-stop", "qml-preview-stop"],
+    ["plugin-version", "plugin-versions"],
+    ["plugin-versions", "plugin-versions"],
+    ["get-plugin-version", "plugin-versions"],
+    ["get-plugin-versions", "plugin-versions"],
+    ["version", "plugin-versions"],
     ["check-plugin-update", "check-plugin-update"],
     ["update-plugin", "update-plugin"],
     ["rp2350-detect", "rp2350-detect"],
@@ -2767,6 +2805,7 @@ function dispatchTargetToolName(action) {
     ["qml-preview-capture", "dbt_qml_preview_capture"],
     ["qml-preview-stop", "dbt_qml_preview_stop"],
     ["autostart", "dbt_configure_autostart"],
+    ["plugin-versions", "dbt_get_plugin_versions"],
     ["check-plugin-update", "dbt_check_plugin_update"],
     ["update-plugin", "dbt_update_plugin"],
     ["rp2350-detect", "dbt_rp2350_detect"],
@@ -2813,6 +2852,7 @@ function geminiAliasToolNames() {
     "dbtqmlpreviewfeedback",
     "dbtqmlpreviewcapture",
     "dbtqmlpreviewstop",
+    "dbtpluginversions",
     "dbtcheckpluginupdate",
     "dbtupdateplugin",
   ])
@@ -4159,6 +4199,15 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           return jsonText(result)
         },
       }),
+      dbt_get_plugin_versions: tool({
+        description: "Return the installed local Embed Labs/DBT runtime version and the latest server release version from the configured manifest. Use this directly for 本地插件版本号, 服务器最新版本号, 当前插件版本, latest plugin version, or plugin version requests. Do not inspect plugin files, search the workspace, or run dbtctl/dbtctl --help for version queries.",
+        args: {
+          source: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          return jsonText(await getPluginVersions({ source: args.source }))
+        },
+      }),
       dbt_check_plugin_update: tool({
         description: "Check the cached Development Board Toolchain update state, trigger a background refresh if needed, and return compact release-manifest guidance for offline board-family packages. Use this for 是否有新版本 or 检查插件更新. Do not run shell commands, inspect dbtctl, call dbtctl --help, read workspace plugin files, or search for an update entrypoint.",
         args: {},
@@ -4949,7 +4998,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
 
   const dispatchTools = { ...tools }
   tools.dbttool = tool({
-    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, qt-build-run, qml-preview-validate, qml-preview-start, qml-preview-status, qml-preview-feedback, qml-preview-capture, qml-preview-stop, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. For 更新插件 or update plugin use action=update-plugin directly; for 检查插件更新 use action=check-plugin-update. Do not discover update commands through shell, dbtctl, dbtctl --help, or workspace scans. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs; use qml-preview-* for host-qt-app UI development and board-qt-app design iteration; use qml-preview-capture after implementation to get a screenshot for AI self-review; use action=qt-build-run only after creating an engineered Qt/QtQuick project in the current workspace and the user asks to run on hardware. Put tool-specific arguments as a JSON object string in arguments_json.",
+    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, qt-build-run, qml-preview-validate, qml-preview-start, qml-preview-status, qml-preview-feedback, qml-preview-capture, qml-preview-stop, plugin-versions, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. For 本地插件版本号 or 服务器最新版本号 use action=plugin-versions directly. For 更新插件 or update plugin use action=update-plugin directly; for 检查插件更新 use action=check-plugin-update. Do not discover version/update commands through shell, dbtctl, dbtctl --help, or workspace scans. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs; use qml-preview-* for host-qt-app UI development and board-qt-app design iteration; use qml-preview-capture after implementation to get a screenshot for AI self-review; use action=qt-build-run only after creating an engineered Qt/QtQuick project in the current workspace and the user asks to run on hardware. Put tool-specific arguments as a JSON object string in arguments_json.",
     args: {
       action: tool.schema.string(),
       request: tool.schema.string().optional(),
@@ -4997,6 +5046,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             "qml-preview-feedback",
             "qml-preview-capture",
             "qml-preview-stop",
+            "plugin-versions",
             "check-plugin-update",
             "update-plugin",
             "rp2350-detect",
@@ -5047,6 +5097,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtqmlpreviewcapture", "dbt_qml_preview_capture", "Capture a QtQuick preview screenshot for AI visual self-review; auto-starts preview when requested."],
     ["dbtqmlpreviewstop", "dbt_qml_preview_stop", "Stop a QtQuick live preview session."],
     ["dbtautostart", "dbt_configure_autostart", "Enable or disable a deployed board app through the fixed DBT userdata autostart broker."],
+    ["dbtpluginversions", "dbt_get_plugin_versions", "Get the local installed Embed Labs/DBT version and the latest server version without inspecting files or running dbtctl."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
   ]
@@ -5236,7 +5287,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           "For Development Board Toolchain requests, call the DBT alias tools. Use dbtstatus for current board status, dbtflashimage for blocking dry-run or short TaishanPi factory/custom image flashing, dbtflashstart plus dbtjobstatus for long real flashing progress, dbtenvcheck for preflight, dbtboardconfig for config, dbtcapabilities or dbtcapabilitycontext for knowledge, dbtapplyeffect only for simple TaishanPi rgb_led solid/off state, dbtbuildrun for generated Linux-board C/C++ execution including rgb_led blinking/timing/multi-color sequences, dbtprocesses for Linux-board process lists, and dbtchipprobe/dbtcpufrequency/dbtddrfrequency/dbtcputemperature/dbtwirelessprobe/dbtwifiscan/dbtbluetoothscan for live probes.",
         )
         output.system.push(
-          "For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbtupdateplugin directly. For 检查插件更新 or 是否有新版本, call dbtcheckpluginupdate. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the update path.",
+          "For plugin/runtime version requests such as 本地插件版本号, 服务器最新版本号, 当前插件版本, or plugin version, call dbtpluginversions directly. For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbtupdateplugin directly. For 检查插件更新 or 是否有新版本, call dbtcheckpluginupdate. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the version/update path.",
         )
         output.system.push(
           "For TaishanPi rgb_led requests with timing, blinking, breathing, repeat counts, fade, traffic-light behavior, or multi-color sequences such as red/yellow/green/blue every 1s, do not call dbtapplyeffect. Call dbtcapabilitycontext with request=rgb_led or arguments_json {\"capability\":\"rgb_led\"}, generate self-contained C/C++ in the current workspace, then call dbtbuildrun with capability=rgb_led.",
@@ -5256,7 +5307,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect only for simple TaishanPi rgb_led solid/off state, action=build-run for generated Linux-board C/C++ execution including rgb_led blinking/timing/multi-color sequences, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and qml-preview-* for QtQuick live preview. For board-runtime linkage, pass backend, board_runtime_host, and board_runtime_port in arguments_json and never treat native preview as linked board output. Pass extra arguments as JSON in arguments_json.",
       )
       output.system.push(
-        "For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbttool with action=update-plugin directly. For 检查插件更新 or 是否有新版本, call dbttool with action=check-plugin-update. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the update path.",
+        "For plugin/runtime version requests such as 本地插件版本号, 服务器最新版本号, 当前插件版本, or plugin version, call dbttool with action=plugin-versions directly. For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbttool with action=update-plugin directly. For 检查插件更新 or 是否有新版本, call dbttool with action=check-plugin-update. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the version/update path.",
       )
       output.system.push(
         "Re-flashed Linux boards regenerate SSH host keys. DBT tools already handle this; if shell ssh/scp is absolutely necessary for diagnostics, use `-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no` with a short timeout, and do not treat host-key mismatch as a board fault.",
