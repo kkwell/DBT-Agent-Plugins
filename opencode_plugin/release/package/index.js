@@ -2740,6 +2740,11 @@ function normalizeDispatchAction(value) {
     ["qml-preview-start", "qml-preview-start"],
     ["qtquick-preview", "qml-preview-start"],
     ["preview-start", "qml-preview-start"],
+    ["qml-board-runtime", "qml-board-runtime-start"],
+    ["qml-board-runtime-start", "qml-board-runtime-start"],
+    ["board-runtime-start", "qml-board-runtime-start"],
+    ["qml-board-runtime-status", "qml-board-runtime-status"],
+    ["board-runtime-status", "qml-board-runtime-status"],
     ["qml-preview-validate", "qml-preview-validate"],
     ["preview-validate", "qml-preview-validate"],
     ["qml-preview-status", "qml-preview-status"],
@@ -2804,6 +2809,8 @@ function dispatchTargetToolName(action) {
     ["apply-effect", "dbt_apply_effect"],
     ["build-run", "dbt_build_run_program"],
     ["qt-build-run", "dbt_qt_build_run_app"],
+    ["qml-board-runtime-start", "dbt_qml_board_runtime_start"],
+    ["qml-board-runtime-status", "dbt_qml_board_runtime_status"],
     ["qml-preview-validate", "dbt_qml_preview_validate"],
     ["qml-preview-start", "dbt_qml_preview_start"],
     ["qml-preview-status", "dbt_qml_preview_status"],
@@ -2854,6 +2861,8 @@ function geminiAliasToolNames() {
     "dbtapplyeffect",
     "dbtbuildrun",
     "dbtqtbuildrun",
+    "dbtqmlboardruntimestatus",
+    "dbtqmlboardruntimestart",
     "dbtqmlpreviewvalidate",
     "dbtqmlpreviewstart",
     "dbtqmlpreviewstatus",
@@ -4746,8 +4755,56 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           return jsonText(result)
         },
       }),
+      dbt_qml_board_runtime_status: tool({
+        description: "Check the connected Linux board-side QtQuick runtime status and return host, port, runner, process, and reachability.",
+        args: {
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          board_runtime_host: tool.schema.string().optional(),
+          board_runtime_port: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const payload = {
+            board_id: asString(args.board),
+            variant_id: asString(args.variant),
+            device_id: asString(args.device_id),
+            board_runtime_host: asString(args.board_runtime_host),
+          }
+          const port = Number.parseInt(asString(args.board_runtime_port), 10)
+          if (Number.isFinite(port)) payload.board_runtime_port = port
+          const result = await localAgentTool("qml_board_runtime_status", payload, { timeoutMs: 30000 })
+          return jsonText(result)
+        },
+      }),
+      dbt_qml_board_runtime_start: tool({
+        description: "Ensure the connected Linux board-side QtQuick runtime is installed, stop conflicting standalone Qt apps, start /userdata/embed-qml-board-runtime/run-board-runtime.sh when needed, and return board_runtime_host/board_runtime_port for dbt_qml_preview_start. Use this before backend=board-runtime preview; do not use dbt_qt_build_run_app for live preview.",
+        args: {
+          board: tool.schema.string().optional(),
+          variant: tool.schema.string().optional(),
+          device_id: tool.schema.string().optional(),
+          board_runtime_host: tool.schema.string().optional(),
+          board_runtime_port: tool.schema.string().optional(),
+          stop_existing_qt_apps: tool.schema.string().optional(),
+          force_restart: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const payload = {
+            board_id: asString(args.board),
+            variant_id: asString(args.variant),
+            device_id: asString(args.device_id),
+            board_runtime_host: asString(args.board_runtime_host),
+            stop_existing_qt_apps: args.stop_existing_qt_apps === undefined ? true : boolValue(args.stop_existing_qt_apps),
+            force_restart: boolValue(args.force_restart),
+          }
+          const port = Number.parseInt(asString(args.board_runtime_port), 10)
+          if (Number.isFinite(port)) payload.board_runtime_port = port
+          const result = await localAgentTool("qml_board_runtime_start", payload, { timeoutMs: 30000 })
+          return jsonText(result)
+        },
+      }),
       dbt_qml_preview_start: tool({
-        description: "Start a QtQuick live preview window for a QML workspace. Default backend=native-qquickview is local-only. Use backend=board-runtime only for real host-to-board linkage; board_runtime_host and board_runtime_port are required, and the tool must fail instead of falling back when the board runtime is unreachable.",
+        description: "Start a QtQuick live preview window for a QML workspace. Default backend=native-qquickview is local-only. For real host-to-board linkage, use backend=board-runtime; dbt-agentd can auto-start the board runtime and must fail instead of falling back when the board runtime is unavailable.",
         args: {
           project_dir: tool.schema.string().optional(),
           workspace: tool.schema.string().optional(),
@@ -5136,6 +5193,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtapplyeffect", "dbt_apply_effect", "Apply a simple direct board effect. For TaishanPi rgb_led, use this only for atomic solid/off state. Do not use this for blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequences; generate C/C++ and use dbtbuildrun instead."],
     ["dbtbuildrun", "dbt_build_run_program", "Build, upload, and run generated C/C++ source for a selected capability. Use this for TaishanPi rgb_led blinking, timing, repeat, breath, fade, traffic-light, or multi-color sequence requests."],
     ["dbtqtbuildrun", "dbt_qt_build_run_app", "Build, upload, and run a board-qt-app Qt/QtQuick project from the current workspace on TaishanPi."],
+    ["dbtqmlboardruntimestatus", "dbt_qml_board_runtime_status", "Check the connected board-side QtQuick runtime status for board-linked preview."],
+    ["dbtqmlboardruntimestart", "dbt_qml_board_runtime_start", "Ensure the board-side QtQuick runtime is running and return host/port for linked preview."],
     ["dbtqmlpreviewvalidate", "dbt_qml_preview_validate", "Validate a local QtQuick/QML workspace before host-qt-app preview or board-qt-app deployment."],
     ["dbtqmlpreviewstart", "dbt_qml_preview_start", "Start a local QtQuick live preview window for host-qt-app UI iteration or board-qt-app design."],
     ["dbtqmlpreviewstatus", "dbt_qml_preview_status", "Show QtQuick live preview session status."],
@@ -5322,7 +5381,15 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       }
       if (input.toolID === "dbt_qml_preview_start" || input.toolID === "dbtqmlpreviewstart") {
         output.description =
-          "Use this after creating or editing a local QtQuick/QML workspace. Default backend=native-qquickview is local-only. For real host-to-board live linkage, use backend=board-runtime with board_runtime_host and board_runtime_port, and verify the returned session backend is board-runtime; the tool must not fall back to native preview and then claim board sync. Run validation first or let the tool validate, then iterate from dbt_qml_preview_feedback."
+          "Use this after creating or editing a local QtQuick/QML workspace. For board-linked UI development, first call dbt_qml_board_runtime_start/dbtqmlboardruntimestart or let this tool auto-start board-runtime, then pass backend=board-runtime and verify the returned session backend is board-runtime. The tool must not fall back to native preview and then claim board sync. Run validation first or let the tool validate, then iterate from dbt_qml_preview_feedback."
+      }
+      if (input.toolID === "dbt_qml_board_runtime_start" || input.toolID === "dbtqmlboardruntimestart") {
+        output.description =
+          "Use this before QtQuick board-linked preview. It stops conflicting standalone Qt apps, starts /userdata/embed-qml-board-runtime/run-board-runtime.sh when needed, and returns board_runtime_host/board_runtime_port for dbt_qml_preview_start. Do not use dbt_qt_build_run_app as a substitute for live preview."
+      }
+      if (input.toolID === "dbt_qml_board_runtime_status" || input.toolID === "dbtqmlboardruntimestatus") {
+        output.description =
+          "Use this to diagnose board-runtime linkage. It reports whether embed-qml-board-runtime is installed, running, and reachable, including the actual board_runtime_host and board_runtime_port."
       }
       if (input.toolID === "dbt_qml_preview_feedback" || input.toolID === "dbtqmlpreviewfeedback") {
         output.description =
@@ -5355,7 +5422,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           "For long real image flashing, prefer dbtflashstart with arguments_json {\"image_source\":\"factory\",\"scope\":\"all\"}, return the job_id, then call dbtjobstatus with that job_id to show current progress. Use dbtflashimage with {\"dry_run\":\"true\"} for validation without real flashing.",
         )
         output.system.push(
-          "For QtQuick work, choose target mode first and ask for the target screen resolution before coding if it is not already known. Use host-qt-app for local macOS Qt applications and UI fine-tuning, or board-qt-app for cross-compiled board applications. Create/edit the engineered Qt project in the current workspace, run dbtqmlpreviewvalidate, start dbtqmlpreviewstart with screen_width/screen_height so the preview preserves the target display ratio and persists user rotation/window size per project, then read user markings with dbtqmlpreviewfeedback and make targeted QML edits. For real host-to-board live linkage, start preview with backend=board-runtime plus board_runtime_host/board_runtime_port and verify the returned backend; dbtqtbuildrun is standalone board deployment and is not linked to the local preview. Board-runtime linkage is Runtime Message Center based: it syncs files, hot reloads, emits `ui.manifest`, uses `UiControlBinder` for standard control public notify signals, emits `ui.event`, and applies lightweight changed-path `app.state.patch` messages with `state_revision`; `state_hash` is only a low-frequency hello/status/full-state diagnostic. TextField/TextArea must declare `statePath`, `cursorStatePath`, and `focusStatePath` so text, cursor, and activeFocus synchronize atomically during middle edit/delete. Slider/Dial/SpinBox must stream multiple `value` patches while dragging in both directions; raw-pointer-only dragging, release-only updates, or alternating host/board values are bugs. TextField/TextArea pointer/focus mirroring is allowed so board focus and cursor are visible. ComboBox must synchronize `currentIndex` plus `popupVisible`/`popupStatePath`; do not rely on raw pointer forwarding for dropdowns, and verify both host->board and board->host opening from board manifest or screenshot after rotation. Button, hardware action, and business-command controls must still use appRuntime.dispatch/state instead of raw pointer side effects. Runtime maps diagnostic host input through board `input_width/input_height`, not raw framebuffer size, so rotated board displays and dropdowns stay aligned. Runtime prevents loops and stale drag queues by ignoring `source=preview-host` echoes, giving recently host-written continuous-control paths, `ui.rotation`, and `jobs.active.progress` paths short host authority, and coalescing stale queued continuous-control values to the latest value on both host and board while keeping ComboBox open-state paths bidirectional. If local state changes but the board does not, debug `ui.event` -> changed-path `app.state.patch` -> `state_revision`/status/capture before changing QML. After implementation, call dbtqmlpreviewcapture to capture the final UI for self-review. Preview success is not final release; for delivery, keep embedlabs-app.json or a release manifest with target mode, main QML, validation/build results, and board deploy/runner fields when applicable.",
+          "For QtQuick work, choose target mode first and ask for the target screen resolution before coding if it is not already known. Use host-qt-app for local macOS Qt applications and UI fine-tuning, or board-qt-app for cross-compiled board applications. Create/edit the engineered Qt project in the current workspace, run dbtqmlpreviewvalidate, then for connected-board UI development call dbtqmlboardruntimestart and start dbtqmlpreviewstart with backend=board-runtime plus the returned board_runtime_host/board_runtime_port; if no board is connected or board-runtime is missing, say local-only preview is being used. Start preview with screen_width/screen_height so the preview preserves the target display ratio and persists user rotation/window size per project, then read user markings with dbtqmlpreviewfeedback and make targeted QML edits. dbtqtbuildrun is standalone final board deployment and is not linked to the local preview; use it only after the user confirms the previewed UI should be packaged/run as the final app. Board-runtime linkage is Runtime Message Center based: it syncs files, hot reloads, emits `ui.manifest`, uses `UiControlBinder` for standard control public notify signals, emits `ui.event`, and applies lightweight changed-path `app.state.patch` messages with `state_revision`; `state_hash` is only a low-frequency hello/status/full-state diagnostic. TextField/TextArea must declare `statePath`, `cursorStatePath`, and `focusStatePath` so text, cursor, and activeFocus synchronize atomically during middle edit/delete. Slider/Dial/SpinBox must stream multiple `value` patches while dragging in both directions; raw-pointer-only dragging, release-only updates, or alternating host/board values are bugs. TextField/TextArea pointer/focus mirroring is allowed so board focus and cursor are visible. ComboBox must synchronize `currentIndex` plus `popupVisible`/`popupStatePath`; do not rely on raw pointer forwarding for dropdowns, and verify both host->board and board->host opening from board manifest or screenshot after rotation. Button, hardware action, and business-command controls must still use appRuntime.dispatch/state instead of raw pointer side effects. Runtime maps diagnostic host input through board `input_width/input_height`, not raw framebuffer size, so rotated board displays and dropdowns stay aligned. Runtime prevents loops and stale drag queues by ignoring `source=preview-host` echoes, giving recently host-written continuous-control paths, `ui.rotation`, and `jobs.active.progress` paths short host authority, and coalescing stale queued continuous-control values to the latest value on both host and board while keeping ComboBox open-state paths bidirectional. If local state changes but the board does not, debug `ui.event` -> changed-path `app.state.patch` -> `state_revision`/status/capture before changing QML. After implementation, call dbtqmlpreviewcapture to capture the final UI for self-review. Preview success is not final release; for delivery, keep embedlabs-app.json or a release manifest with target mode, main QML, validation/build results, and board deploy/runner fields when applicable.",
         )
         output.system.push(
           "Do not run dbtctl, dbtctl --help, host bash flashing commands, or source-checkout binaries for board operations. The local dbt-agentd runtime owns status, mode detection, flashing, probes, and tool events. Re-flashed Linux boards regenerate SSH host keys; DBT tools already handle this. If shell ssh/scp is absolutely necessary for diagnostics, use `-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no` with a short timeout and do not ask the user to edit known_hosts unless they want persistent manual SSH.",
@@ -5363,7 +5430,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         return
       }
       output.system.push(
-        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect only for simple TaishanPi rgb_led solid/off state, action=build-run for generated Linux-board C/C++ execution including rgb_led blinking/timing/multi-color sequences, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, and qml-preview-* for QtQuick live preview. For board-runtime linkage, pass backend, board_runtime_host, and board_runtime_port in arguments_json and never treat native preview as linked board output. Pass extra arguments as JSON in arguments_json.",
+        "For Development Board Toolchain requests in OpenCode with Gemini, call the dbttool dispatcher instead of underscored DBT tool ids. Use action=status for current board status, action=apply-effect only for simple TaishanPi rgb_led solid/off state, action=build-run for generated Linux-board C/C++ execution including rgb_led blinking/timing/multi-color sequences, action=processes for Linux-board process lists, action=flash-image for blocking dry-run or short TaishanPi image flashing, action=flash-start plus action=job-status for long real flashing progress, action=qml-board-runtime-start/status for QtQuick board runtime, and qml-preview-* for QtQuick live preview. For board-runtime linkage, call qml-board-runtime-start first, pass backend and returned board_runtime_host/board_runtime_port in arguments_json, and never treat native preview as linked board output. Pass extra arguments as JSON in arguments_json.",
       )
       output.system.push(
         "For plugin/runtime version requests such as 本地插件版本号, 服务器最新版本号, 当前插件版本, or plugin version, call dbttool with action=plugin-versions directly. For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbttool with action=update-plugin directly. For 检查插件更新 or 是否有新版本, call dbttool with action=check-plugin-update. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the version/update path.",
@@ -5467,7 +5534,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         "For TaishanPi Qt or QtQuick app requests, first create an engineered Qt project in the current workspace with source/assets/config and, for reusable or release-bound apps, embedlabs-app.json. Use dbt_qml_preview_* for UI iteration. For preview-compatible Main.qml with an Item/Rectangle root, the compiled board executable must use a C++ QQuickView launcher with showFullScreen; QQmlApplicationEngine alone creates no visible board window. Call dbt_qt_build_run_app or dbttool action=qt-build-run with project_dir only when the user asks to run on the board. Default TaishanPi Qt QPA is eglfs; treat deployment as successful only after remote dir, runner, delayed process check, and clean QML/QPA log evidence. Do not use dbt_build_run_program for Qt apps, do not look for qmlscene, and do not guess qmake/CMake/linker paths manually.",
       )
       output.system.push(
-        "For local QtQuick UI design requests, choose target mode first and ask for the target screen resolution before coding if it is not already known. Use host-qt-app for local macOS Qt applications and UI fine-tuning, or board-qt-app for later board deployment. Use the live-preview loop: write QML in the current workspace, validate with dbt_qml_preview_validate or dbttool action=qml-preview-validate, start dbt_qml_preview_start or action=qml-preview-start with screen_width/screen_height so the computer preview matches the display ratio and persists user rotation/window size per project, then read dbt_qml_preview_feedback/action=qml-preview-feedback after the user marks a control/container/region. For actual local-board linkage use backend=board-runtime and require board_runtime_host/board_runtime_port; if the session backend is native-qquickview, report that it is not linked. Board-runtime linkage is Runtime Message Center based: workspace sync, hot reload, `ui.manifest`, stable standard input-control `UiControlBinder`, `ui.event`, lightweight changed-path `app.state.patch` messages with `state_revision`, runtime-managed diagnostic pointer/focus/key mirroring, and rotated board coordinate mapping through `input_width/input_height`; `state_hash` is only a low-frequency hello/status/full-state diagnostic. TextField/TextArea must expose `statePath`, `cursorStatePath`, and `focusStatePath`; runtime must sync text, cursor, and activeFocus in one batch for middle insertion/deletion. Slider/Dial/SpinBox must publish several `value` state patches during drag in both directions; do not use board raw pointer `input.ack` as realtime linkage evidence. ComboBox dropdown linkage must be synchronized through `currentIndex` plus `popupVisible`/`popupStatePath` and verified in both directions from board manifest or screenshot after rotation. Button, hardware action, and business-command controls must use explicit appRuntime state/actions, not raw pointer side effects. Runtime ignores `source=preview-host` echoes, gives recently host-written continuous-control paths, `ui.rotation`, and `jobs.active.progress` paths short host authority, and coalesces stale queued continuous-control values to the latest value on both host and board while leaving ComboBox open-state paths bidirectional to avoid Dial/ProgressBar loops without blocking dropdowns. Use explicit appRuntime state/actions for Popup/Dialog business state, View scroll commit, ProgressBar/task status, hardware actions, long jobs, errors, custom controls, and durable business state; use boardRuntimeDisplay.rotation only for optional fine-grained layout adaptation. Use semantic_item/item/container_item/selection from feedback as the edit target and make focused local QML changes. After implementation, call dbt_qml_preview_capture/action=qml-preview-capture; inspect the returned image_path when possible and compare it against the user's goal before finalizing. Do not treat preview as final release.",
+        "For local QtQuick UI design requests, choose target mode first and ask for the target screen resolution before coding if it is not already known. Use host-qt-app for local macOS Qt applications and UI fine-tuning, or board-qt-app for later board deployment. Use the live-preview loop: write QML in the current workspace, validate with dbt_qml_preview_validate or dbttool action=qml-preview-validate, then for connected-board UI development call dbt_qml_board_runtime_start or dbttool action=qml-board-runtime-start and start dbt_qml_preview_start/action=qml-preview-start with backend=board-runtime plus the returned board_runtime_host/board_runtime_port. If board-runtime cannot be started, report local-only preview instead of claiming linkage. Start preview with screen_width/screen_height so the computer preview matches the display ratio and persists user rotation/window size per project, then read dbt_qml_preview_feedback/action=qml-preview-feedback after the user marks a control/container/region. dbt_qt_build_run_app/action=qt-build-run is standalone final deployment and is not linked to the local preview; use it only after the user confirms the previewed UI should be packaged/run as the final app. Board-runtime linkage is Runtime Message Center based: workspace sync, hot reload, `ui.manifest`, stable standard input-control `UiControlBinder`, `ui.event`, lightweight changed-path `app.state.patch` messages with `state_revision`, runtime-managed diagnostic pointer/focus/key mirroring, and rotated board coordinate mapping through `input_width/input_height`; `state_hash` is only a low-frequency hello/status/full-state diagnostic. TextField/TextArea must expose `statePath`, `cursorStatePath`, and `focusStatePath`; runtime must sync text, cursor, and activeFocus in one batch for middle insertion/deletion. Slider/Dial/SpinBox must publish several `value` state patches during drag in both directions; do not use board raw pointer `input.ack` as realtime linkage evidence. ComboBox dropdown linkage must be synchronized through `currentIndex` plus `popupVisible`/`popupStatePath` and verified in both directions from board manifest or screenshot after rotation. Button, hardware action, and business-command controls must use explicit appRuntime state/actions, not raw pointer side effects. Runtime ignores `source=preview-host` echoes, gives recently host-written continuous-control paths, `ui.rotation`, and `jobs.active.progress` paths short host authority, and coalesces stale queued continuous-control values to the latest value on both host and board while leaving ComboBox open-state paths bidirectional to avoid Dial/ProgressBar loops without blocking dropdowns. Use explicit appRuntime state/actions for Popup/Dialog business state, View scroll commit, ProgressBar/task status, hardware actions, long jobs, errors, custom controls, and durable business state; use boardRuntimeDisplay.rotation only for optional fine-grained layout adaptation. Use semantic_item/item/container_item/selection from feedback as the edit target and make focused local QML changes. After implementation, call dbt_qml_preview_capture/action=qml-preview-capture; inspect the returned image_path when possible and compare it against the user's goal before finalizing. Do not treat preview as final release.",
       )
       output.system.push(
         "For board app autostart requests, call dbt_configure_autostart/dbtautostart after the app has been deployed. Use app_type=qt with remote_runner_path from dbt_qt_build_run_app, and app_type=native with remote_binary_path set to remote_artifact_path from dbt_build_run_program. Do not inspect init systems, do not create per-app systemd units, and do not write custom /etc/init.d app scripts.",
