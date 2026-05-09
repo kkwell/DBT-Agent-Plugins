@@ -2759,6 +2759,12 @@ function normalizeDispatchAction(value) {
     ["version", "plugin-versions"],
     ["check-plugin-update", "check-plugin-update"],
     ["update-plugin", "update-plugin"],
+    ["install-gui", "install-gui"],
+    ["gui-install", "install-gui"],
+    ["install-mac-gui", "install-gui"],
+    ["uninstall-gui", "uninstall-gui"],
+    ["gui-uninstall", "uninstall-gui"],
+    ["remove-gui", "uninstall-gui"],
     ["rp2350-detect", "rp2350-detect"],
     ["rp2350-flash", "rp2350-flash"],
     ["rp2350-verify", "rp2350-verify"],
@@ -2808,6 +2814,8 @@ function dispatchTargetToolName(action) {
     ["plugin-versions", "dbt_get_plugin_versions"],
     ["check-plugin-update", "dbt_check_plugin_update"],
     ["update-plugin", "dbt_update_plugin"],
+    ["install-gui", "dbt_install_gui"],
+    ["uninstall-gui", "dbt_uninstall_gui"],
     ["rp2350-detect", "dbt_rp2350_detect"],
     ["rp2350-flash", "dbt_rp2350_flash"],
     ["rp2350-verify", "dbt_rp2350_verify"],
@@ -2855,6 +2863,8 @@ function geminiAliasToolNames() {
     "dbtpluginversions",
     "dbtcheckpluginupdate",
     "dbtupdateplugin",
+    "dbtinstallgui",
+    "dbtuninstallgui",
   ])
 }
 
@@ -4230,6 +4240,40 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           })
         },
       }),
+      dbt_install_gui: tool({
+        description: "Install or repair the optional macOS DBT-Agent GUI app through the local DBT runtime. Use this directly for 安装 GUI, 安装 mac 端 GUI, 安装图形界面, or install GUI requests. Do not inspect dbtctl, search files, or run shell commands.",
+        args: {
+          install_dir: tool.schema.string().optional(),
+          manifest_url: tool.schema.string().optional(),
+          gui_url: tool.schema.string().optional(),
+          force: tool.schema.string().optional(),
+          open: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const payload = {
+            install_dir: asString(args.install_dir),
+            manifest_url: asString(args.manifest_url),
+            gui_url: asString(args.gui_url),
+            force: boolValue(args.force),
+            open: boolValue(args.open),
+          }
+          return jsonText(await localAgentTool("install_gui", payload, { timeoutMs: 600000 }))
+        },
+      }),
+      dbt_uninstall_gui: tool({
+        description: "Uninstall only the optional macOS DBT-Agent GUI app through the local DBT runtime. This does not remove the shared runtime, dbt-agentd, board environments, Codex plugin, or OpenCode plugin. Use this directly for 卸载 GUI or remove GUI requests.",
+        args: {
+          install_dir: tool.schema.string().optional(),
+          all_known: tool.schema.string().optional(),
+        },
+        async execute(args) {
+          const payload = {
+            install_dir: asString(args.install_dir),
+            all_known: boolValue(args.all_known),
+          }
+          return jsonText(await localAgentTool("uninstall_gui", payload, { timeoutMs: 120000 }))
+        },
+      }),
       dbt_ensure_usbnet: tool({
         description: "Ensure the macOS USB ECM host interface is configured to the expected static IP.",
         args: {},
@@ -4998,7 +5042,7 @@ export const DevelopmentBoardToolchainPlugin = async () => {
 
   const dispatchTools = { ...tools }
   tools.dbttool = tool({
-    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, qt-build-run, qml-preview-validate, qml-preview-start, qml-preview-status, qml-preview-feedback, qml-preview-capture, qml-preview-stop, plugin-versions, check-plugin-update, update-plugin, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. For 本地插件版本号 or 服务器最新版本号 use action=plugin-versions directly. For 更新插件 or update plugin use action=update-plugin directly; for 检查插件更新 use action=check-plugin-update. Do not discover version/update commands through shell, dbtctl, dbtctl --help, or workspace scans. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs; use qml-preview-* for host-qt-app UI development and board-qt-app design iteration; use qml-preview-capture after implementation to get a screenshot for AI self-review; use action=qt-build-run only after creating an engineered Qt/QtQuick project in the current workspace and the user asks to run on hardware. Put tool-specific arguments as a JSON object string in arguments_json.",
+    description: "Gemini-safe DBT tool dispatcher. Use this for DBT operations. Set action to one of: status, list-devices, flash-image, flash-start, job-status, prepare, capabilities, capability-summaries, capability-context, board-config, env-check, env-install, usbnet, update-logo, chip-probe, cpu-frequency, ddr-frequency, cpu-temperature, processes, wireless-probe, connect-wifi, scan-wifi, scan-bluetooth, apply-effect, build-run, qt-build-run, qml-preview-validate, qml-preview-start, qml-preview-status, qml-preview-feedback, qml-preview-capture, qml-preview-stop, plugin-versions, check-plugin-update, update-plugin, install-gui, uninstall-gui, rp2350-detect, rp2350-flash, rp2350-verify, rp2350-run, rp2350-logs, rp2350-build-flash. For 本地插件版本号 or 服务器最新版本号 use action=plugin-versions directly. For 更新插件 or update plugin use action=update-plugin directly; for 检查插件更新 use action=check-plugin-update. For Mac GUI install/uninstall requests use action=install-gui or action=uninstall-gui directly. Do not discover version/update/GUI commands through shell, dbtctl, dbtctl --help, or workspace scans. action=apply-effect is only for simple solid/off effects; use action=build-run for timed or multi-color generated programs; use qml-preview-* for host-qt-app UI development and board-qt-app design iteration; use qml-preview-capture after implementation to get a screenshot for AI self-review; use action=qt-build-run only after creating an engineered Qt/QtQuick project in the current workspace and the user asks to run on hardware. Put tool-specific arguments as a JSON object string in arguments_json.",
     args: {
       action: tool.schema.string(),
       request: tool.schema.string().optional(),
@@ -5049,6 +5093,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
             "plugin-versions",
             "check-plugin-update",
             "update-plugin",
+            "install-gui",
+            "uninstall-gui",
             "rp2350-detect",
             "rp2350-flash",
             "rp2350-verify",
@@ -5100,6 +5146,8 @@ export const DevelopmentBoardToolchainPlugin = async () => {
     ["dbtpluginversions", "dbt_get_plugin_versions", "Get the local installed Embed Labs/DBT version and the latest server version without inspecting files or running dbtctl."],
     ["dbtcheckpluginupdate", "dbt_check_plugin_update", "Check Development Board Toolchain update status."],
     ["dbtupdateplugin", "dbt_update_plugin", "Update the installed Development Board Toolchain OpenCode plugin/runtime."],
+    ["dbtinstallgui", "dbt_install_gui", "Install or repair the optional macOS DBT-Agent GUI app."],
+    ["dbtuninstallgui", "dbt_uninstall_gui", "Uninstall only the optional macOS DBT-Agent GUI app."],
   ]
   for (const [aliasName, targetName, description] of aliasSpecs) {
     tools[aliasName] = tool({
@@ -5264,6 +5312,14 @@ export const DevelopmentBoardToolchainPlugin = async () => {
         output.description =
           "Use this to poll a local dbt-agentd job by job_id. Summarize progress_percent, status_label, output_tail, terminal state, and failure_summary directly to the user."
       }
+      if (input.toolID === "dbt_install_gui" || input.toolID === "dbtinstallgui") {
+        output.description =
+          "Use this directly when the user asks to install or repair the optional macOS DBT-Agent GUI app. Do not inspect dbtctl, search files, or run shell commands."
+      }
+      if (input.toolID === "dbt_uninstall_gui" || input.toolID === "dbtuninstallgui") {
+        output.description =
+          "Use this directly when the user asks to uninstall the optional macOS DBT-Agent GUI app. It must not remove runtime, agent, board environments, or editor plugins."
+      }
       if (input.toolID === "dbt_qml_preview_start" || input.toolID === "dbtqmlpreviewstart") {
         output.description =
           "Use this after creating or editing a local QtQuick/QML workspace. Default backend=native-qquickview is local-only. For real host-to-board live linkage, use backend=board-runtime with board_runtime_host and board_runtime_port, and verify the returned session backend is board-runtime; the tool must not fall back to native preview and then claim board sync. Run validation first or let the tool validate, then iterate from dbt_qml_preview_feedback."
@@ -5290,6 +5346,9 @@ export const DevelopmentBoardToolchainPlugin = async () => {
           "For plugin/runtime version requests such as 本地插件版本号, 服务器最新版本号, 当前插件版本, or plugin version, call dbtpluginversions directly. For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbtupdateplugin directly. For 检查插件更新 or 是否有新版本, call dbtcheckpluginupdate. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the version/update path.",
         )
         output.system.push(
+          "For Mac GUI app requests such as 安装 GUI, 安装 mac 端 GUI, 安装图形界面, 卸载 GUI, or uninstall GUI, call dbtinstallgui or dbtuninstallgui directly. These tools only manage the optional macOS DBT-Agent.app and must not remove the shared runtime, dbt-agentd, board environments, Codex plugin, or OpenCode plugin.",
+        )
+        output.system.push(
           "For TaishanPi rgb_led requests with timing, blinking, breathing, repeat counts, fade, traffic-light behavior, or multi-color sequences such as red/yellow/green/blue every 1s, do not call dbtapplyeffect. Call dbtcapabilitycontext with request=rgb_led or arguments_json {\"capability\":\"rgb_led\"}, generate self-contained C/C++ in the current workspace, then call dbtbuildrun with capability=rgb_led.",
         )
         output.system.push(
@@ -5308,6 +5367,9 @@ export const DevelopmentBoardToolchainPlugin = async () => {
       )
       output.system.push(
         "For plugin/runtime version requests such as 本地插件版本号, 服务器最新版本号, 当前插件版本, or plugin version, call dbttool with action=plugin-versions directly. For plugin/runtime update requests such as 更新插件, 升级插件, 更新 Embed Labs, or update plugin, call dbttool with action=update-plugin directly. For 检查插件更新 or 是否有新版本, call dbttool with action=check-plugin-update. Do not run shell commands, do not inspect dbtctl or dbtctl --help, and do not search plugin source files to discover the version/update path.",
+      )
+      output.system.push(
+        "For Mac GUI app requests such as 安装 GUI, 安装 mac 端 GUI, 安装图形界面, 卸载 GUI, or uninstall GUI, call dbttool with action=install-gui or action=uninstall-gui directly. These actions only manage the optional macOS DBT-Agent.app and must not remove the shared runtime, dbt-agentd, board environments, Codex plugin, or OpenCode plugin.",
       )
       output.system.push(
         "Re-flashed Linux boards regenerate SSH host keys. DBT tools already handle this; if shell ssh/scp is absolutely necessary for diagnostics, use `-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no` with a short timeout, and do not treat host-key mismatch as a board fault.",
